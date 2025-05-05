@@ -15,8 +15,6 @@ with st.sidebar:
         index=0
     )
 
-    st.text(f'Horn type: {horn_type}')
-
     throat_r = st.number_input('Throat Radius (mm)', value=15.0, min_value=1.0, max_value=1000.0)
     cutoff_f = st.number_input('Cutoff Frequency (Hz)', value=1000, min_value=1, max_value=20000)
 
