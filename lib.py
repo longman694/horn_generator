@@ -194,50 +194,59 @@ def generate_hcd_horn(origin_profile: pd.DataFrame, mouth_ratio=1.7, mode: Liter
 
     elif mode == 'para':
         mr = df[['x (mm)']].copy()
-        mr['_x'] = CubicSpline([0, df['x (mm)'].max()], [0,1])(mr['x (mm)'])
+        max_x = mr['x (mm)'].max()
+        mr['_x'] = CubicSpline([0, max_x], [0,1])(mr['x (mm)'])
         mr['y'] = mr['_x']**2 * (mouth_ratio - 1) + 1
-        mouth_ratio_transform = CubicSpline(mr['x (mm)'], mr['y'])
+        max_index = mr[mr['x (mm)'] == max_x].index.min()
+        mouth_ratio_transform = CubicSpline(mr[mr.index <= max_index]['x (mm)'], mr[mr.index <= max_index]['y'])
 
     elif mode == 'exp':
         mr = df[['x (mm)']].copy()
-        mr['_x'] = CubicSpline([0, df['x (mm)'].max()], [0,1])(mr['x (mm)'])
+        max_x = mr['x (mm)'].max()
+        mr['_x'] = CubicSpline([0, max_x], [0,1])(mr['x (mm)'])
         mr['y'] = np.sqrt(mr['_x']) * (mouth_ratio - 1) + 1
-        mouth_ratio_transform = CubicSpline(mr['x (mm)'], mr['y'])
+        max_index = mr[mr['x (mm)'] == max_x].index.min()
+        mouth_ratio_transform = CubicSpline(mr[mr.index <= max_index]['x (mm)'], mr[mr.index <= max_index]['y'])
 
     elif mode == 'log':
         mr = df[['x (mm)']].copy()
-        mr['_x'] = CubicSpline([0, df['x (mm)'].max()], [0,1])(mr['x (mm)'])
-        mr['y'] = np.log(9*mr['_x'] + 1) * (mouth_ratio - 1) + 1
-        mouth_ratio_transform = CubicSpline(mr['x (mm)'], mr['y'])
+        max_x = mr['x (mm)'].max()
+        mr['_x'] = CubicSpline([0, max_x], [0,1])(mr['x (mm)'])
+        mr['y'] = np.log10(9*mr['_x'] + 1) * (mouth_ratio - 1) + 1
+        max_index = mr[mr['x (mm)'] == max_x].index.min()
+        mouth_ratio_transform = CubicSpline(mr[mr.index <= max_index]['x (mm)'], mr[mr.index <= max_index]['y'])
 
     elif mode == 'hyper':
         mr = df[['x (mm)']].copy()
-        mr['_x'] = CubicSpline([0, df['x (mm)'].max()], [0,1])(mr['x (mm)'])
+        max_x = mr['x (mm)'].max()
+        mr['_x'] = CubicSpline([0, max_x], [0,1])(mr['x (mm)'])
         mr['y'] = np.sqrt((mr['_x']+1)**2 - 1)/np.sqrt(3) * (mouth_ratio - 1) + 1
-        mouth_ratio_transform = CubicSpline(mr['x (mm)'], mr['y'])
+        max_index = mr[mr['x (mm)'] == max_x].index.min()
+        mouth_ratio_transform = CubicSpline(mr[mr.index <= max_index]['x (mm)'], mr[mr.index <= max_index]['y'])
 
     elif mode == 'logistic':
         mr = df[['x (mm)']].copy()
-        mr['_x'] = CubicSpline([0, df['x (mm)'].max()], [0,1])(mr['x (mm)'])
+        max_x = mr['x (mm)'].max()
+        mr['_x'] = CubicSpline([0, max_x], [0,1])(mr['x (mm)'])
         mr['y'] = 1/(1 + np.exp(11*(0.5-mr['_x']))) * (mouth_ratio - 1) + 1
-        mouth_ratio_transform = CubicSpline(mr['x (mm)'], mr['y'])
-
-    elif mode == 'acc':
-        mouth_ratio_transform = CubicSpline([0, df['x (mm)'].max()], [1, mouth_ratio*1.5])
+        max_index = mr[mr['x (mm)'] == max_x].index.min()
+        mouth_ratio_transform = CubicSpline(mr[mr.index <= max_index]['x (mm)'], mr[mr.index <= max_index]['y'])
 
     else:
         raise ValueError('`mode` must be `linear`, `para`, `exp`, `log`, or `hyper`')
 
     # df['mouth_ratio'] = mouth_ratio
     df['mouth_ratio'] = mouth_ratio_transform(df['x (mm)']).clip(max=org_mouth_ratio)
+    first_max_index = df[df['mouth_ratio'] == df['mouth_ratio'].max()].index.min()
+    df.loc[df.index > first_max_index, 'mouth_ratio'] = org_mouth_ratio
 
     df['b'] = np.sqrt(df['area']/ np.pi / df['mouth_ratio'])
     df['a'] = df['b'] * df['mouth_ratio']
 
     fig_transition = go.Figure()
-    fig_transition.add_trace(go.Scatter(x=df['x (mm)'], y=df['mouth_ratio'], mode='lines', name='Mouth Ratio'))
+    fig_transition.add_trace(go.Scatter(x=df.index, y=df['mouth_ratio'], mode='lines', name='Mouth Ratio'))
     fig_transition.update_layout(title='Mouth ratio',
-                        xaxis_title='x (mm)',
+                        xaxis_title='point',
                         yaxis_title='mouth ratio',
                         height=600, width=1200)
 
