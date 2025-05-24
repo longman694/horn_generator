@@ -1,8 +1,14 @@
+from io import BytesIO, StringIO
 from typing import Literal
 
+import ezdxf
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from ezdxf import units
+from ezdxf.gfxattribs import GfxAttribs
+from ezdxf.math import Vec3
+from ezdxf.render import forms
 from scipy.interpolate import CubicSpline
 from plotly.subplots import make_subplots
 
@@ -10,7 +16,7 @@ from plotly.subplots import make_subplots
 __all__ = (
     'create_2d_plot', 'create_3d_plot',
     'plot_demo', 'interpolate', 'generate_hcd_horn', 'generate_tractrix_horn',
-    'generate_spherical_horn', 'generate_exponential_horn'
+    'generate_spherical_horn', 'generate_exponential_horn', 'generate_dxf'
 )
 
 
@@ -312,3 +318,19 @@ def generate_hcd_horn(origin_profile: pd.DataFrame, mouth_ratio=1.7, mode: Liter
         fig3d.show()
 
     return df[['x (mm)', 'y (mm)', 'a', 'b']], [fig_transition, fig2d, fig3d]
+
+
+def generate_dxf(df: pd.DataFrame) -> bytes:
+    """export a profile ready to revolve in CAD"""
+    doc = ezdxf.new(units=units.MM)
+
+    points = []
+    for index, row in df.iterrows():
+        points.append((row['x (mm)'], row['y (mm)'], 0))
+    msp = doc.modelspace()
+    msp.add_spline(points)
+
+    buffer = BytesIO()
+    doc.write(buffer, fmt='bin')
+    buffer.seek(0)
+    return buffer.getvalue()

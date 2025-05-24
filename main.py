@@ -42,11 +42,20 @@ buffer = io.BytesIO()
 if not enable_hcd:
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         df.to_excel(writer, sheet_name='Sheet1', index=False)
-    st.download_button(
+    left, middle, right = st.columns(3)
+    left.download_button(
         label='export to excel',
         data=buffer.getvalue(),
         file_name=f'{horn_type.capitalize()}.xlsx',
-        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        use_container_width=True
+    )
+    middle.download_button(
+        label='export to DXF',
+        data=generate_dxf(df),
+        file_name=f'{horn_type.capitalize()}.dxf',
+        mime='model/vnd.dwf',
+        use_container_width=True
     )
 
     st.plotly_chart(create_2d_plot(df['x (mm)'], df['y (mm)']), use_container_width=True)
@@ -73,7 +82,6 @@ if enable_hcd:
         file_name=f'{horn_type.capitalize()}_HCD_{mouth_ratio:.1f}.xlsx',
         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-
     for fig in figs:
         st.plotly_chart(fig, use_container_width=True)
 
