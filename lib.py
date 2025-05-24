@@ -1,14 +1,14 @@
-from io import BytesIO, StringIO
+import os
+import tempfile
+from io import BytesIO
 from typing import Literal
 
 import ezdxf
+import cadquery as cq
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from ezdxf import units
-from ezdxf.gfxattribs import GfxAttribs
-from ezdxf.math import Vec3
-from ezdxf.render import forms
 from scipy.interpolate import CubicSpline
 from plotly.subplots import make_subplots
 
@@ -16,7 +16,8 @@ from plotly.subplots import make_subplots
 __all__ = (
     'create_2d_plot', 'create_3d_plot',
     'plot_demo', 'interpolate', 'generate_hcd_horn', 'generate_tractrix_horn',
-    'generate_spherical_horn', 'generate_exponential_horn', 'generate_dxf'
+    'generate_spherical_horn', 'generate_exponential_horn', 'generate_dxf',
+    'generate_step',
 )
 
 
@@ -334,3 +335,29 @@ def generate_dxf(df: pd.DataFrame) -> bytes:
     doc.write(buffer, fmt='bin')
     buffer.seek(0)
     return buffer.getvalue()
+
+
+def generate_step(df: pd.DataFrame, hcd_enabled: bool = False) -> bytes:
+    """export a horn profile model in .step"""
+    c = cq.Workplane("XY")
+
+    current_offset = 0
+    for index, row in df.iterrows():
+        if not hcd_enabled:
+            move_up = row['x (mm)'] - current_offset
+            current_offset += move_up
+            c = c.workplane(offset=move_up).ellipse(row['y (mm)'], row['y (mm)'])
+        else:
+            move_up = row['x (mm)'] - current_offset
+            current_offset += move_up
+            c = c.workplane(offset=move_up).ellipse(row['a'], row['b'])
+    c = c.loft(combine=True)
+
+    temp = tempfile.NamedTemporaryFile(delete=False, mode='bw+', suffix='.step')
+    c.export(temp.name)
+    temp.flush()
+    temp.seek(0)
+    buffer = temp.read()
+    temp.close()
+    os.unlink(temp.name)
+    return buffer

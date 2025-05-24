@@ -44,17 +44,24 @@ if not enable_hcd:
         df.to_excel(writer, sheet_name='Sheet1', index=False)
     left, middle, right = st.columns(3)
     left.download_button(
-        label='export to excel',
+        label='Export to Excel',
         data=buffer.getvalue(),
         file_name=f'{horn_type.capitalize()}.xlsx',
         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         use_container_width=True
     )
     middle.download_button(
-        label='export to DXF',
+        label='Export to DXF',
         data=generate_dxf(df),
         file_name=f'{horn_type.capitalize()}.dxf',
         mime='model/vnd.dwf',
+        use_container_width=True
+    )
+    right.download_button(
+        label='Export to STEP',
+        data=generate_step(df, False),
+        file_name=f'{horn_type.capitalize()}.stp',
+        mime='application/STEP',
         use_container_width=True
     )
 
@@ -89,6 +96,13 @@ if enable_hcd:
         label='export to DXF',
         disabled=True,
         help='Only available on circular mode.',
+        use_container_width=True
+    )
+    right.download_button(
+        label='Export to STEP',
+        data=generate_step(hcd, True),
+        file_name=f'{horn_type.capitalize()}_HCD_{mouth_ratio:.1f}.step',
+        mime='application/STEP',
         use_container_width=True
     )
     for fig in figs:
