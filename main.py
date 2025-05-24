@@ -76,11 +76,20 @@ if enable_hcd:
 
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         hcd.to_excel(writer, sheet_name='Sheet1', index=False)
-    st.download_button(
+
+    left, middle, right = st.columns(3)
+    left.download_button(
         label='export to excel',
         data=buffer.getvalue(),
         file_name=f'{horn_type.capitalize()}_HCD_{mouth_ratio:.1f}.xlsx',
-        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        use_container_width=True,
+    )
+    middle.button(
+        label='export to DXF',
+        disabled=True,
+        help='Only available on circular mode.',
+        use_container_width=True
     )
     for fig in figs:
         st.plotly_chart(fig, use_container_width=True)
