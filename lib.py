@@ -16,8 +16,8 @@ from plotly.subplots import make_subplots
 __all__ = (
     'create_2d_plot', 'create_3d_plot',
     'plot_demo', 'interpolate', 'generate_hcd_horn', 'generate_tractrix_horn',
-    'generate_spherical_horn', 'generate_exponential_horn', 'generate_dxf',
-    'generate_step',
+    'generate_spherical_horn', 'generate_exponential_horn',
+    'generate_excel', 'generate_dxf', 'generate_step',
 )
 
 
@@ -319,6 +319,13 @@ def generate_hcd_horn(origin_profile: pd.DataFrame, mouth_ratio=1.7, mode: Liter
         fig3d.show()
 
     return df[['x (mm)', 'y (mm)', 'a', 'b']], [fig_transition, fig2d, fig3d]
+
+
+def generate_excel(df: pd.DataFrame) -> bytes:
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        df.to_excel(writer, sheet_name='Sheet1', index=False)
+    return buffer.getvalue()
 
 
 def generate_dxf(df: pd.DataFrame) -> bytes:

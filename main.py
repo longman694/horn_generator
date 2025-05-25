@@ -1,8 +1,7 @@
-import io
+import time
 
-import streamlit as st
 import pandas as pd
-import numpy as np
+import streamlit as st
 
 from lib import *
 
@@ -39,41 +38,50 @@ with st.sidebar:
 
     enable_hcd = st.checkbox('HCD', value=False)
 
-buffer = io.BytesIO()
+download_render = st.form('download_render_form', border=False)
+submit = download_render.form_submit_button('Download')
 
 if not enable_hcd:
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        df.to_excel(writer, sheet_name='Sheet1', index=False)
-    left, middle, right = st.columns(3)
-    left.download_button(
-        label='Export to Excel',
-        data=buffer.getvalue(),
-        file_name=f'{horn_type.capitalize()}.xlsx',
-        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        use_container_width=True
-    )
-    middle.download_button(
-        label='Export to DXF',
-        data=generate_dxf(df),
-        file_name=f'{horn_type.capitalize()}.dxf',
-        mime='model/vnd.dwf',
-        use_container_width=True
-    )
-    if not fold or (fold and not fold_back):
-        right.download_button(
-            label='Export to STEP',
-            data=generate_step(df, False, fold),
-            file_name=f'{horn_type.capitalize()}.step',
-            mime='application/STEP',
-            use_container_width=True
-        )
-    else:
-        right.button(
-            label='Export to STEP',
-            disabled=True,
-            help='Not support for fold back horn.',
-            use_container_width=True
-        )
+    if submit:
+        with st.container(border=True):
+            with st.spinner("rendering ...", show_time=True):
+                time.sleep(0.5)
+                excel_data = generate_excel(df)
+                dxf_data = generate_dxf(df)
+                step_data = None
+                if not fold or (fold and not fold_back):
+                    step_data = generate_step(df, False, fold)
+
+                left, middle, right = st.columns(3)
+                left.download_button(
+                    label='Export to Excel',
+                    data=excel_data,
+                    file_name=f'{horn_type.capitalize()}.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    use_container_width=True
+                )
+                middle.download_button(
+                    label='Export to DXF',
+                    data=dxf_data,
+                    file_name=f'{horn_type.capitalize()}.dxf',
+                    mime='model/vnd.dwf',
+                    use_container_width=True
+                )
+                if not fold or (fold and not fold_back):
+                    right.download_button(
+                        label='Export to STEP',
+                        data=step_data,
+                        file_name=f'{horn_type.capitalize()}.step',
+                        mime='application/STEP',
+                        use_container_width=True
+                    )
+                else:
+                    right.button(
+                        label='Export to STEP',
+                        disabled=True,
+                        help='Not support for fold back horn.',
+                        use_container_width=True
+                    )
 
     st.plotly_chart(create_2d_plot(df['x (mm)'], df['y (mm)']), use_container_width=True)
     st.plotly_chart(create_3d_plot(df['x (mm)'], df['y (mm)']), use_container_width=True)
@@ -91,38 +99,45 @@ if enable_hcd:
 
     hcd, figs = generate_hcd_horn(df, mouth_ratio, mode, acc, plot=False)
 
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        hcd.to_excel(writer, sheet_name='Sheet1', index=False)
+    if submit:
+        with st.container(border=True):
+            with st.spinner("rendering ...", show_time=True):
+                time.sleep(0.5)
+                excel_data = generate_excel(hcd)
+                dxf_data = None
+                step_data = None
+                if not fold or (fold and not fold_back):
+                    step_data = generate_step(hcd, False, fold)
 
-    left, middle, right = st.columns(3)
-    left.download_button(
-        label='Export to Excel',
-        data=buffer.getvalue(),
-        file_name=f'{horn_type.capitalize()}_HCD_{mouth_ratio:.1f}.xlsx',
-        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        use_container_width=True,
-    )
-    middle.button(
-        label='Export to DXF',
-        disabled=True,
-        help='Only available on circular mode.',
-        use_container_width=True
-    )
-    if not fold or (fold and not fold_back):
-        right.download_button(
-            label='Export to STEP',
-            data=generate_step(hcd, True, fold),
-            file_name=f'{horn_type.capitalize()}_HCD_{mouth_ratio:.1f}.step',
-            mime='application/STEP',
-            use_container_width=True
-        )
-    else:
-        right.button(
-            label='Export to STEP',
-            disabled=True,
-            help='Not support for fold back horn.',
-            use_container_width=True
-        )
+                left, middle, right = st.columns(3)
+                left.download_button(
+                    label='Export to Excel',
+                    data=excel_data,
+                    file_name=f'{horn_type.capitalize()}_HCD_{mouth_ratio:.1f}.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    use_container_width=True,
+                )
+                middle.button(
+                    label='Export to DXF',
+                    disabled=True,
+                    help='Only available on circular mode.',
+                    use_container_width=True
+                )
+                if not fold or (fold and not fold_back):
+                    right.download_button(
+                        label='Export to STEP',
+                        data=step_data,
+                        file_name=f'{horn_type.capitalize()}_HCD_{mouth_ratio:.1f}.step',
+                        mime='application/STEP',
+                        use_container_width=True
+                    )
+                else:
+                    right.button(
+                        label='Export to STEP',
+                        disabled=True,
+                        help='Not support for fold back horn.',
+                        use_container_width=True
+                    )
     for fig in figs:
         st.plotly_chart(fig, use_container_width=True)
 
