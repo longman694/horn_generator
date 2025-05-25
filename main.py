@@ -16,23 +16,25 @@ with st.sidebar:
     )
 
     throat_r = st.number_input('Throat Radius (mm)', value=15.0, min_value=1.0, max_value=1000.0, step=1.0)
-    cutoff_f = st.number_input('Cutoff Frequency (Hz)', value=1000, min_value=1, max_value=20000, step=100)
+    cutoff_f = st.number_input('Cutoff Frequency (Hz)', value=1000, min_value=10, max_value=15000, step=100)
 
     df = pd.DataFrame()
+    fold = False
+
     if horn_type == 'Tractrix':
-        num_points = st.number_input('Number of points', value=10, min_value=1, max_value=1000)
+        num_points = st.number_input('Number of points', value=10, min_value=1, max_value=50)
 
         df = generate_tractrix_horn(throat_r, cutoff_f, num_points, plot=False)
 
     elif horn_type == 'Spherical':
-        scale = st.number_input('Scale resolution (mm)', value=4.0, min_value=0.1, max_value=20.0, step=1.0)
+        scale = st.number_input('Scale resolution (mm)', value=4.0, min_value=0.5, max_value=20.0, step=1.0)
         fold = st.checkbox('allow to fold', value=False)
         fold_back = st.checkbox('allow to fold back', value=True, disabled=not fold)
 
         df = generate_spherical_horn(throat_r, cutoff_f, scale, fold, fold_back, plot=False)
 
     elif horn_type == 'Exponential':
-        scale = st.number_input('Scale resolution (mm)', value=4.0, min_value=0.1, max_value=20.0, step=1.0)
+        scale = st.number_input('Scale resolution (mm)', value=4.0, min_value=0.5, max_value=20.0, step=1.0)
         df = generate_exponential_horn(throat_r, cutoff_f, scale, plot=False)
 
     enable_hcd = st.checkbox('HCD', value=False)
@@ -57,13 +59,21 @@ if not enable_hcd:
         mime='model/vnd.dwf',
         use_container_width=True
     )
-    right.download_button(
-        label='Export to STEP',
-        data=generate_step(df, False),
-        file_name=f'{horn_type.capitalize()}.stp',
-        mime='application/STEP',
-        use_container_width=True
-    )
+    if not fold or (fold and not fold_back):
+        right.download_button(
+            label='Export to STEP',
+            data=generate_step(df, False, fold),
+            file_name=f'{horn_type.capitalize()}.step',
+            mime='application/STEP',
+            use_container_width=True
+        )
+    else:
+        right.button(
+            label='Export to STEP',
+            disabled=True,
+            help='Not support for fold back horn.',
+            use_container_width=True
+        )
 
     st.plotly_chart(create_2d_plot(df['x (mm)'], df['y (mm)']), use_container_width=True)
     st.plotly_chart(create_3d_plot(df['x (mm)'], df['y (mm)']), use_container_width=True)
@@ -86,25 +96,33 @@ if enable_hcd:
 
     left, middle, right = st.columns(3)
     left.download_button(
-        label='export to excel',
+        label='Export to Excel',
         data=buffer.getvalue(),
         file_name=f'{horn_type.capitalize()}_HCD_{mouth_ratio:.1f}.xlsx',
         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         use_container_width=True,
     )
     middle.button(
-        label='export to DXF',
+        label='Export to DXF',
         disabled=True,
         help='Only available on circular mode.',
         use_container_width=True
     )
-    right.download_button(
-        label='Export to STEP',
-        data=generate_step(hcd, True),
-        file_name=f'{horn_type.capitalize()}_HCD_{mouth_ratio:.1f}.step',
-        mime='application/STEP',
-        use_container_width=True
-    )
+    if not fold or (fold and not fold_back):
+        right.download_button(
+            label='Export to STEP',
+            data=generate_step(hcd, True, fold),
+            file_name=f'{horn_type.capitalize()}_HCD_{mouth_ratio:.1f}.step',
+            mime='application/STEP',
+            use_container_width=True
+        )
+    else:
+        right.button(
+            label='Export to STEP',
+            disabled=True,
+            help='Not support for fold back horn.',
+            use_container_width=True
+        )
     for fig in figs:
         st.plotly_chart(fig, use_container_width=True)
 

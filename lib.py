@@ -337,24 +337,53 @@ def generate_dxf(df: pd.DataFrame) -> bytes:
     return buffer.getvalue()
 
 
-def generate_step(df: pd.DataFrame, hcd_enabled: bool = False) -> bytes:
+def generate_step(df: pd.DataFrame, hcd_enabled: bool = False, fold: bool = False) -> bytes:
     """export a horn profile model in .step"""
-    c = cq.Workplane("XY")
+    outer = cq.Workplane("XY")
+    inner = cq.Workplane("XY")
+
+    if fold:
+        outer2 = cq.Workplane("XY")
+    else:
+        outer2 = None
 
     current_offset = 0
+    fold_area = False
+    max_x = df['x (mm)'].max()
     for index, row in df.iterrows():
         if not hcd_enabled:
             move_up = row['x (mm)'] - current_offset
             current_offset += move_up
-            c = c.workplane(offset=move_up).ellipse(row['y (mm)'], row['y (mm)'])
+            if move_up <= 0 and index != 0:
+                fold_area = True
+            if fold:
+                outer2 = outer2.workplane(offset=move_up)
+                if fold_area or row['x (mm)'] == max_x:
+                    outer2 = outer2.ellipse(row['y (mm)'], row['y (mm)'])
+            if not fold_area:
+                outer = outer.workplane(offset=move_up).ellipse(row['y (mm)'] + 1, row['y (mm)'] + 1)
+                inner = inner.workplane(offset=move_up).ellipse(row['y (mm)'], row['y (mm)'])
         else:
             move_up = row['x (mm)'] - current_offset
             current_offset += move_up
-            c = c.workplane(offset=move_up).ellipse(row['a'], row['b'])
-    c = c.loft(combine=True)
+            if move_up <= 0 and index != 0:
+                fold_area = True
+            if not fold or fold_area or row['x (mm)'] == max_x:
+                outer2 = outer2.workplane(offset=move_up)
+                if fold_area or row['x (mm)'] == max_x:
+                    outer2 = outer2.ellipse(row['a'], row['b'])
+            if not fold_area:
+                outer = outer.workplane(offset=move_up).ellipse(row['a'] + 1, row['b'] + 1)
+                inner = inner.workplane(offset=move_up).ellipse(row['a'], row['b'])
+
+    outer = outer.loft(combine=True)
+    inner = inner.loft(combine=True)
+    if fold:
+        outer = outer.union(outer2.loft(combine=True))
+    result = outer.cut(inner)
 
     temp = tempfile.NamedTemporaryFile(delete=False, mode='bw+', suffix='.step')
-    c.export(temp.name)
+    result.export(temp.name)
     temp.flush()
     temp.seek(0)
     buffer = temp.read()
