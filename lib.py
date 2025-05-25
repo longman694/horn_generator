@@ -368,7 +368,10 @@ def generate_step(df: pd.DataFrame, hcd_enabled: bool = False, fold: bool = Fals
                 if fold_area or row['x (mm)'] == max_x:
                     outer2 = outer2.ellipse(row['y (mm)'], row['y (mm)'])
             if not fold_area:
-                outer = outer.workplane(offset=move_up).ellipse(row['y (mm)'] + 1, row['y (mm)'] + 1)
+                if fold and row['x (mm)'] == max_x:
+                    outer = outer.workplane(offset=move_up).ellipse(row['y (mm)'], row['y (mm)'])
+                else:
+                    outer = outer.workplane(offset=move_up).ellipse(row['y (mm)'] + 1, row['y (mm)'] + 1)
                 inner = inner.workplane(offset=move_up).ellipse(row['y (mm)'], row['y (mm)'])
         else:
             move_up = row['x (mm)'] - current_offset
@@ -380,7 +383,10 @@ def generate_step(df: pd.DataFrame, hcd_enabled: bool = False, fold: bool = Fals
                 if fold_area or row['x (mm)'] == max_x:
                     outer2 = outer2.ellipse(row['a'], row['b'])
             if not fold_area:
-                outer = outer.workplane(offset=move_up).ellipse(row['a'] + 1, row['b'] + 1)
+                if fold and row['x (mm)'] == max_x:
+                    outer = outer.workplane(offset=move_up).ellipse(row['a'], row['b'])
+                else:
+                    outer = outer.workplane(offset=move_up).ellipse(row['a'] + 1, row['b'] + 1)
                 inner = inner.workplane(offset=move_up).ellipse(row['a'], row['b'])
 
     outer = outer.loft(combine=True)
