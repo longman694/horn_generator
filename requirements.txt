@@ -6,3 +6,5 @@ streamlit~=1.43.2
 xlsxwriter~=3.2.2
 ezdxf~=1.4.2
 git+https://github.com/CadQuery/cadquery.git
+pytest
+openpyxl
