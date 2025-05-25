@@ -45,7 +45,7 @@ if not enable_hcd:
     if submit:
         with st.container(border=True):
             with st.spinner("rendering ...", show_time=True):
-                time.sleep(0.5)
+                time.sleep(0.8)
                 excel_data = generate_excel(df)
                 dxf_data = generate_dxf(df)
                 step_data = None
@@ -102,12 +102,12 @@ if enable_hcd:
     if submit:
         with st.container(border=True):
             with st.spinner("rendering ...", show_time=True):
-                time.sleep(0.5)
+                time.sleep(0.8)
                 excel_data = generate_excel(hcd)
                 dxf_data = None
                 step_data = None
                 if not fold or (fold and not fold_back):
-                    step_data = generate_step(hcd, False, fold)
+                    step_data = generate_step(hcd, True, fold)
 
                 left, middle, right = st.columns(3)
                 left.download_button(

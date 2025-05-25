@@ -375,7 +375,7 @@ def generate_step(df: pd.DataFrame, hcd_enabled: bool = False, fold: bool = Fals
             current_offset += move_up
             if move_up <= 0 and index != 0:
                 fold_area = True
-            if not fold or fold_area or row['x (mm)'] == max_x:
+            if fold:
                 outer2 = outer2.workplane(offset=move_up)
                 if fold_area or row['x (mm)'] == max_x:
                     outer2 = outer2.ellipse(row['a'], row['b'])
