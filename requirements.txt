@@ -10,3 +10,4 @@ cadquery-ocp~=7.8.1
 multimethod~=1.12
 typish~=1.9.3
 casadi~=3.7.0
+nlopt~=2.9.1
