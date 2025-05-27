@@ -344,7 +344,7 @@ def generate_dxf(df: pd.DataFrame) -> bytes:
     return buffer.getvalue()
 
 
-def generate_step(df: pd.DataFrame, hcd_enabled: bool = False, fold: bool = False) -> bytes:
+def generate_step(df: pd.DataFrame, hcd_enabled: bool = False, fold: bool = False, edge_width: float = 1.0) -> bytes:
     """export a horn profile model in .step"""
     outer = cq.Workplane("XY")
     inner = cq.Workplane("XY")
@@ -371,7 +371,9 @@ def generate_step(df: pd.DataFrame, hcd_enabled: bool = False, fold: bool = Fals
                 if fold and row['x (mm)'] == max_x:
                     outer = outer.workplane(offset=move_up).ellipse(row['y (mm)'], row['y (mm)'])
                 else:
-                    outer = outer.workplane(offset=move_up).ellipse(row['y (mm)'] + 1, row['y (mm)'] + 1)
+                    outer = outer.workplane(offset=move_up).ellipse(
+                        row['y (mm)'] + edge_width, row['y (mm)'] + edge_width
+                    )
                 inner = inner.workplane(offset=move_up).ellipse(row['y (mm)'], row['y (mm)'])
         else:
             move_up = row['x (mm)'] - current_offset
@@ -386,7 +388,7 @@ def generate_step(df: pd.DataFrame, hcd_enabled: bool = False, fold: bool = Fals
                 if fold and row['x (mm)'] == max_x:
                     outer = outer.workplane(offset=move_up).ellipse(row['a'], row['b'])
                 else:
-                    outer = outer.workplane(offset=move_up).ellipse(row['a'] + 1, row['b'] + 1)
+                    outer = outer.workplane(offset=move_up).ellipse(row['a'] + edge_width, row['b'] + edge_width)
                 inner = inner.workplane(offset=move_up).ellipse(row['a'], row['b'])
 
     outer = outer.loft(combine=True)

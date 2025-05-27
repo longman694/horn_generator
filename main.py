@@ -36,12 +36,21 @@ with st.sidebar:
         scale = st.number_input('Scale resolution (mm)', value=4.0, min_value=0.5, max_value=20.0, step=1.0)
         df = generate_exponential_horn(throat_r, cutoff_f, scale, plot=False)
 
-    enable_hcd = st.checkbox('HCD', value=False)
+    st.divider()
+
+    enable_hcd = st.checkbox('HCD', value=False, help="Enable HCD (Hybrid Constant Directivity) mode")
 
 download_render = st.form('download_render_form', border=False)
 submit = download_render.form_submit_button('Download')
 
 if not enable_hcd:
+    with st.sidebar:
+        st.divider()
+        step_edge_width = st.number_input(
+            'Edge width (mm) for STEP file', value=1.0, min_value=1.0, max_value=10.0, step=0.5,
+            help="Try to increase this if the solid from STEP file's broken"
+        )
+
     if submit:
         with st.container(border=True):
             with st.spinner("rendering ...", show_time=True):
@@ -50,7 +59,7 @@ if not enable_hcd:
                 dxf_data = generate_dxf(df)
                 step_data = None
                 if not fold or (fold and not fold_back):
-                    step_data = generate_step(df, False, fold)
+                    step_data = generate_step(df, False, fold, step_edge_width)
 
                 left, middle, right = st.columns(3)
                 left.download_button(
@@ -97,6 +106,12 @@ if enable_hcd:
         )
         acc = st.number_input('Accelerate', value=1.0, min_value=1.0, max_value=2.0, step=0.1)
 
+        st.divider()
+        step_edge_width = st.number_input(
+            'Edge width (mm) for STEP file', value=2.0, min_value=1.0, max_value=10.0, step=0.5,
+            help="Try to increase this if the solid from STEP file's broken"
+        )
+
     hcd, figs = generate_hcd_horn(df, mouth_ratio, mode, acc, plot=False)
 
     if submit:
@@ -107,7 +122,7 @@ if enable_hcd:
                 dxf_data = None
                 step_data = None
                 if not fold or (fold and not fold_back):
-                    step_data = generate_step(hcd, True, fold)
+                    step_data = generate_step(hcd, True, fold, step_edge_width)
 
                 left, middle, right = st.columns(3)
                 left.download_button(
@@ -142,3 +157,11 @@ if enable_hcd:
         st.plotly_chart(fig, use_container_width=True)
 
     st.table(hcd)
+
+st.divider()
+footer_markdown = """
+<div style="text-align: center; color: #888; font-size: 0.9em;">
+    Napat Charoenlarpkul's Horn Generator &copy; 2025 | <a href="https://github.com/longman694/horn_generator" target="_blank" rel="noopener noreferrer">Source Code</a>
+</div>
+"""
+st.markdown(footer_markdown, unsafe_allow_html=True)
