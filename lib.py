@@ -15,7 +15,8 @@ from plotly.subplots import make_subplots
 
 __all__ = (
     'create_2d_plot', 'create_3d_plot',
-    'plot_demo', 'interpolate', 'generate_hcd_horn', 'generate_tractrix_horn',
+    'plot_demo', 'interpolate', 'generate_hcd_horn', 
+    'generate_osse_horn', 'generate_tractrix_horn',
     'generate_spherical_horn', 'generate_exponential_horn',
     'generate_excel', 'generate_dxf', 'generate_step',
 )
@@ -86,7 +87,7 @@ def interpolate(df: pd.DataFrame, num_point=10) -> pd.DataFrame:
     return new_df
 
 
-def generate_osse_horn(throat_radius, length, alpha=45, alpha_0=0, k=1, s=0.8, q=0.998, n=5, num_points=10, plot=True):
+def generate_osse_horn(throat_radius, length, alpha=45, alpha_0=0, k=1.0, s=0.8, q=0.998, n=5, num_points=10, plot=True):
     """
     Generates the OS-SE horn profile coordinates.
     

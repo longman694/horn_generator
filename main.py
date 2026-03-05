@@ -10,17 +10,34 @@ with st.sidebar:
 
     horn_type = st.selectbox(
         'Select Horn type',
-        options=['Tractrix', 'Spherical', 'Exponential'],
+        options=['OS-SE', 'Tractrix', 'Spherical', 'Exponential'],
         index=0
     )
 
     throat_r = st.number_input('Throat Radius (mm)', value=15.0, min_value=1.0, max_value=1000.0, step=1.0)
-    cutoff_f = st.number_input('Cutoff Frequency (Hz)', value=1000, min_value=10, max_value=15000, step=100)
+    if not horn_type == 'OS-SE':
+        cutoff_f = st.number_input('Cutoff Frequency (Hz)', value=1000, min_value=10, max_value=15000, step=100)
 
     df = pd.DataFrame()
     fold = False
 
-    if horn_type == 'Tractrix':
+    if horn_type == 'OS-SE':
+        length = st.number_input('Length (mm)', value=10, min_value=1, max_value=1000)
+        alpha = st.number_input('angle (degree)', value=45, min_value=10, max_value=80)
+        alpha_0 = st.number_input('start angle (degree)', value=0, min_value=0, max_value=alpha)
+        k = st.number_input('throat expansion factor', value=1.0, min_value=0.1, max_value=10.0,
+                            help='\'1\' is a pure OS profile')
+        s = st.number_input('superellipse aspect ratio', value=0.8, min_value=0.25, max_value=1.5,
+                            help='amount of termination flare')
+        q = st.number_input('truncation coefficient', value=0.998, min_value=0.9, max_value=1.00,
+                            help='keeps the termination from extending unnecessarily')
+        n = st.number_input('superellipse exponent', value=5, min_value=2, max_value=10, 
+                            help='determines how gradual the termination is')
+        num_points = st.number_input('Number of points', value=10, min_value=1, max_value=100)
+
+        df = generate_osse_horn(throat_r, length, alpha, alpha_0, k, s, q, n, num_points=num_points, plot=False)
+
+    elif horn_type == 'Tractrix':
         num_points = st.number_input('Number of points', value=10, min_value=1, max_value=50)
 
         df = generate_tractrix_horn(throat_r, cutoff_f, num_points, plot=False)
