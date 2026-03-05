@@ -29,7 +29,7 @@ with st.sidebar:
                             help='\'1\' is a pure OS profile')
         s = st.number_input('superellipse aspect ratio', value=0.8, min_value=0.25, max_value=1.5,
                             help='amount of termination flare')
-        q = st.number_input('truncation coefficient', value=0.998, min_value=0.9, max_value=1.00,
+        q = st.number_input('truncation coefficient', value=0.998, min_value=0.9, max_value=1.00, format='%0.3f',
                             help='keeps the termination from extending unnecessarily')
         n = st.number_input('superellipse exponent', value=5, min_value=2, max_value=10, 
                             help='determines how gradual the termination is')
@@ -59,6 +59,15 @@ with st.sidebar:
 
 download_render = st.form('download_render_form', border=False)
 submit = download_render.form_submit_button('Download')
+
+if horn_type == 'OS-SE':
+    import numpy as np
+    throat_r_m = throat_r / 1000.0 
+    
+    # fc = 44 * sin(alpha) / a
+    calculated_fc = (44.0 * np.sin(np.radians(alpha))) / throat_r_m
+    
+    st.info(f"💡 Calculated Cutoff Frequency (OS-SE): **{calculated_fc:,.0f} Hz*")
 
 if not enable_hcd:
     with st.sidebar:
