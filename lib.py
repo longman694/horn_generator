@@ -86,6 +86,47 @@ def interpolate(df: pd.DataFrame, num_point=10) -> pd.DataFrame:
     return new_df
 
 
+def generate_osse_horn(throat_radius, length, alpha=45, alpha_0=0, k=1, s=0.8, q=0.998, n=5, num_points=10, plot=True):
+    """
+    Generates the OS-SE horn profile coordinates.
+    
+    Parameters:
+    throat_radius: r0 in mm
+    length: L in mm
+    alpha: nominal coverage angle (half the beamwidth) in degrees
+    alpha_0: throat opening angle (half the included angle) in degrees
+    k: throat expansion factor (k=1 is a pure OS profile)
+    s: superellipse aspect ratio (amount of termination flare)
+    q: truncation coefficient (keeps the termination from extending unnecessarily)
+    n: superellipse exponent (determines how gradual the termination is)
+    num_points: number of coordinate points to generate
+    """
+    alpha_rad = np.radians(alpha)
+    alpha_0_rad = np.radians(alpha_0)
+    
+    z = np.linspace(0, length, num_points)
+    
+    term1 = np.sqrt(
+        (k**2 * throat_radius**2) + 
+        (2 * k * throat_radius * z * np.tan(alpha_0_rad)) + 
+        (z**2 * np.tan(alpha_rad)**2)
+    )
+    term2 = throat_radius * (1 - k)
+    r_GOS = term1 + term2
+    
+    r_TERM = (s * length / q) * (1 - (1 - (q * z / length)**n)**(1/n))
+
+    r_OSSE = r_GOS + r_TERM
+    
+    df = pd.DataFrame({'x (mm)': z, 'y (mm)': r_OSSE})
+    
+    # Plotting logic matching lib.py
+    if plot:
+        plot_demo(df['x (mm)'], df['y (mm)'])
+        
+    return df[['x (mm)', 'y (mm)']]
+
+
 def generate_tractrix_horn(throat_radius, cutoff_freq, num_points=10, plot=True):
     """
     throat_radius in mm
