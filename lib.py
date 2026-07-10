@@ -16,6 +16,7 @@ from plotly.subplots import make_subplots
 __all__ = (
     'create_2d_plot', 'create_3d_plot',
     'plot_demo', 'interpolate', 'generate_hcd_horn', 
+    'generate_morphed_horn',
     'generate_osse_horn', 'generate_tractrix_horn',
     'generate_spherical_horn', 'generate_exponential_horn',
     'generate_excel', 'generate_dxf', 'generate_step',
@@ -386,7 +387,121 @@ def generate_dxf(df: pd.DataFrame) -> bytes:
     return buffer.getvalue()
 
 
-def generate_step(df: pd.DataFrame, hcd_enabled: bool = False, fold: bool = False, edge_width: float = 1.0) -> bytes:
+def generate_morphed_horn(origin_profile: pd.DataFrame, target_width: float, target_height: float, corner_radius: float, fixed_part: float, morph_rate: float, num_angles: int = 72, plot: bool = True) -> tuple[pd.DataFrame, list[go.Figure]]:
+    df = origin_profile.copy()
+    L = df['x (mm)'].max()
+    r_mouth = df.iloc[-1]['y (mm)']
+
+    if target_width <= 0:
+        target_width = 2 * r_mouth
+    if target_height <= 0:
+        target_height = 2 * r_mouth
+
+    W = target_width
+    H = target_height
+    CR = min(corner_radius, W / 2, H / 2)
+
+    # Generate angles
+    theta = np.linspace(0, 2*np.pi, num_angles, endpoint=False)
+    r_tgt = np.zeros_like(theta)
+
+    xc = W/2 - CR
+    yc = H/2 - CR
+
+    for i, t in enumerate(theta):
+        # map to first quadrant for symmetry
+        cos_t = np.abs(np.cos(t))
+        sin_t = np.abs(np.sin(t))
+        
+        # Avoid division by zero
+        if cos_t < 1e-6:
+            r = (H/2) / sin_t
+        elif sin_t < 1e-6:
+            r = (W/2) / cos_t
+        else:
+            y_intersect = (W/2) * (sin_t / cos_t)
+            x_intersect = (H/2) * (cos_t / sin_t)
+            
+            if y_intersect <= yc:
+                r = (W/2) / cos_t
+            elif x_intersect <= xc:
+                r = (H/2) / sin_t
+            else:
+                # Intersects corner arc
+                # r^2 - 2r(xc cos t + yc sin t) + xc^2 + yc^2 - CR^2 = 0
+                b = -2 * (xc * cos_t + yc * sin_t)
+                c = xc**2 + yc**2 - CR**2
+                r = (-b + np.sqrt(b**2 - 4*c)) / 2
+        
+        r_tgt[i] = r
+
+    # Ratio function k(theta)
+    k_theta = r_tgt / r_mouth
+
+    z = df['x (mm)'].values
+    z_fixed = fixed_part * L
+    
+    w_z = np.zeros_like(z)
+    mask = z > z_fixed
+    if L > z_fixed:
+        w_z[mask] = ((z[mask] - z_fixed) / (L - z_fixed)) ** morph_rate
+
+    # r(z, theta) = r_raw(z) * [1 + w(z) * (k(theta) - 1)]
+    r_raw = df['y (mm)'].values
+    
+    # r_matrix shape: (len(z), len(theta))
+    r_matrix = r_raw[:, np.newaxis] * (1 + w_z[:, np.newaxis] * (k_theta[np.newaxis, :] - 1))
+
+    # Add matrix back to dataframe
+    df['r_matrix'] = list(r_matrix)
+    df['theta'] = [theta] * len(df)
+
+    figs = []
+    # Create 3D plot
+    x_vals, y_vals, z_vals = [], [], []
+    for i, row in df.iterrows():
+        r_vals = row['r_matrix']
+        t_vals = row['theta']
+        x_circ = r_vals * np.cos(t_vals)
+        y_circ = r_vals * np.sin(t_vals)
+        z_circ = np.full_like(t_vals, row['x (mm)'])
+
+        # Close the loop for plotting
+        x_circ = np.append(x_circ, x_circ[0])
+        y_circ = np.append(y_circ, y_circ[0])
+        z_circ = np.append(z_circ, z_circ[0])
+
+        x_vals.extend(x_circ)
+        y_vals.extend(y_circ)
+        z_vals.extend(z_circ)
+
+    fig3d = go.Figure(data=go.Scatter3d(
+        x=x_vals, y=y_vals, z=z_vals,
+        mode='lines+markers',
+        marker=dict(size=1),
+        line=dict(width=1),
+    ))
+
+    fig3d.update_layout(
+        title="3D Morphed Horn",
+        scene=dict(
+            xaxis_title="X",
+            yaxis_title="Y",
+            zaxis_title="Z (mm)",
+            aspectmode='data',
+            aspectratio=dict(x=1, y=1, z=1),
+        ),
+        height=800, width=1200,
+    )
+    figs.append(fig3d)
+
+    if plot:
+        fig3d.show()
+
+    return df, figs
+
+
+def generate_step(df: pd.DataFrame, hcd_enabled: bool = False, morph_enabled: bool = False, fold: bool = False, edge_width: float = 1.0) -> bytes:
     """export a horn profile model in .step"""
     outer = cq.Workplane("XY")
     inner = cq.Workplane("XY")
@@ -400,11 +515,25 @@ def generate_step(df: pd.DataFrame, hcd_enabled: bool = False, fold: bool = Fals
     fold_area = False
     max_x = df['x (mm)'].max()
     for index, row in df.iterrows():
-        if not hcd_enabled:
-            move_up = row['x (mm)'] - current_offset
-            current_offset += move_up
-            if move_up <= 0 and index != 0:
-                fold_area = True
+        move_up = row['x (mm)'] - current_offset
+        current_offset += move_up
+        if move_up <= 0 and index != 0:
+            fold_area = True
+
+        if morph_enabled:
+            pts = [(r * np.cos(t), r * np.sin(t)) for r, t in zip(row['r_matrix'], row['theta'])]
+            pts_edge = [((r + edge_width) * np.cos(t), (r + edge_width) * np.sin(t)) for r, t in zip(row['r_matrix'], row['theta'])]
+            if fold:
+                outer2 = outer2.workplane(offset=move_up)
+                if fold_area or row['x (mm)'] == max_x:
+                    outer2 = outer2.polyline(pts).close()
+            if not fold_area:
+                if fold and row['x (mm)'] == max_x:
+                    outer = outer.workplane(offset=move_up).polyline(pts).close()
+                else:
+                    outer = outer.workplane(offset=move_up).polyline(pts_edge).close()
+                inner = inner.workplane(offset=move_up).polyline(pts).close()
+        elif not hcd_enabled:
             if fold:
                 outer2 = outer2.workplane(offset=move_up)
                 if fold_area or row['x (mm)'] == max_x:
@@ -418,10 +547,6 @@ def generate_step(df: pd.DataFrame, hcd_enabled: bool = False, fold: bool = Fals
                     )
                 inner = inner.workplane(offset=move_up).ellipse(row['y (mm)'], row['y (mm)'])
         else:
-            move_up = row['x (mm)'] - current_offset
-            current_offset += move_up
-            if move_up <= 0 and index != 0:
-                fold_area = True
             if fold:
                 outer2 = outer2.workplane(offset=move_up)
                 if fold_area or row['x (mm)'] == max_x:

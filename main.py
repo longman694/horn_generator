@@ -56,6 +56,7 @@ with st.sidebar:
     st.divider()
 
     enable_hcd = st.checkbox('HCD', value=False, help="Enable HCD (Hybrid Constant Directivity) mode")
+    enable_morph = st.checkbox('Morph to Rectangle', value=False, help="Morph the circular profile into a rectangular mouth")
 
 download_render = st.form('download_render_form', border=False)
 submit = download_render.form_submit_button('Download')
@@ -69,7 +70,7 @@ if horn_type == 'OS-SE':
     
     st.info(f"💡 Calculated Cutoff Frequency (OS-SE): **{calculated_fc:,.0f} Hz*")
 
-if not enable_hcd:
+if not enable_hcd and not enable_morph:
     with st.sidebar:
         st.divider()
         step_edge_width = st.number_input(
@@ -183,6 +184,73 @@ if enable_hcd:
         st.plotly_chart(fig, use_container_width=True)
 
     st.table(hcd)
+
+if enable_morph:
+    with st.sidebar:
+        st.divider()
+        st.subheader("Morph Parameters")
+        target_width = st.number_input('Target Width (mm) [0 = auto]', value=0.0, step=1.0)
+        target_height = st.number_input('Target Height (mm) [0 = auto]', value=0.0, step=1.0)
+        corner_radius = st.number_input('Corner Radius (mm)', value=18.0, step=1.0)
+        fixed_part = st.number_input('Fixed Part (0-1)', value=0.0, min_value=0.0, max_value=1.0, step=0.1)
+        morph_rate = st.number_input('Morph Rate', value=3.0, step=0.1)
+
+        st.divider()
+        step_edge_width = st.number_input(
+            'Edge width (mm) for STEP file', value=2.0, min_value=1.0, max_value=10.0, step=0.5,
+            help="Try to increase this if the solid from STEP file's broken",
+            key='step_edge_width_morph'
+        )
+
+    morphed_df, figs = generate_morphed_horn(df, target_width, target_height, corner_radius, fixed_part, morph_rate, plot=False)
+
+    if submit:
+        with st.container(border=True):
+            with st.spinner("rendering ...", show_time=True):
+                time.sleep(0.8)
+                excel_data = generate_excel(df)
+                dxf_data = None
+                step_data = None
+                if not fold or (fold and not fold_back):
+                    step_data = generate_step(morphed_df, hcd_enabled=False, morph_enabled=True, fold=fold, edge_width=step_edge_width)
+
+                left, middle, right = st.columns(3)
+                left.download_button(
+                    label='Export to Excel',
+                    data=excel_data,
+                    file_name=f'{horn_type.capitalize()}_Morphed.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    use_container_width=True,
+                )
+                middle.button(
+                    label='Export to DXF',
+                    disabled=True,
+                    help='Not available on morph mode.',
+                    use_container_width=True,
+                    key='dxf_morph'
+                )
+                if not fold or (fold and not fold_back):
+                    right.download_button(
+                        label='Export to STEP',
+                        data=step_data,
+                        file_name=f'{horn_type.capitalize()}_Morphed.step',
+                        mime='application/STEP',
+                        use_container_width=True,
+                        key='step_morph'
+                    )
+                else:
+                    right.button(
+                        label='Export to STEP',
+                        disabled=True,
+                        help='Not support for fold back horn.',
+                        use_container_width=True,
+                        key='step_morph_disabled'
+                    )
+    for fig in figs:
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Show the base df as morphed_df contains array columns which might not render well in table
+    st.table(df)
 
 st.divider()
 footer_markdown = """
