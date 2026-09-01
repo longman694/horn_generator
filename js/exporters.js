@@ -35,22 +35,42 @@ function generateCSV(points, isHCD = false) {
 }
 
 /**
- * Generate DXF string for 2D profile (AutoCAD / CAD software)
+ * Generate DXF string for 2D profile (Fusion 360 / AutoCAD compliant DXF R2000)
  */
 function generateDXF(points) {
-    let dxf = "0\nSECTION\n2\nHEADER\n0\nENDSEC\n";
+    let dxf = "0\nSECTION\n2\nHEADER\n";
+    dxf += "9\n$ACADVER\n1\nAC1015\n"; // AutoCAD 2000 format
+    dxf += "9\n$INSUNITS\n70\n4\n"; // 4 = Millimeters
+    dxf += "0\nENDSEC\n";
+    
+    dxf += "0\nSECTION\n2\nTABLES\n0\nENDSEC\n";
+    dxf += "0\nSECTION\n2\nBLOCKS\n0\nENDSEC\n";
+    
     dxf += "0\nSECTION\n2\nENTITIES\n";
 
-    // Write LWPOLYLINE entity for the horn 2D profile
+    // Write LWPOLYLINE entity for the horn 2D profile with AcDb subclass markers for Fusion 360
     dxf += "0\nLWPOLYLINE\n";
-    dxf += "8\nHORN_PROFILE\n";
-    dxf += `90\n${points.length}\n`; // Vertices count
-    dxf += "70\n0\n"; // Open polyline
+    dxf += "5\n30\n";                  // Entity handle
+    dxf += "100\nAcDbEntity\n";        // Subclass marker
+    dxf += "8\n0\n";                   // Layer 0
+    dxf += "100\nAcDbPolyline\n";      // Subclass marker
+    dxf += `90\n${points.length}\n`;   // Vertices count
+    dxf += "70\n0\n";                  // Open polyline flag
 
     for (const p of points) {
         dxf += `10\n${p.x.toFixed(4)}\n`;
         dxf += `20\n${p.y.toFixed(4)}\n`;
     }
+
+    // Add X-axis centerline from x=0 to x=max_x to make revolving in Fusion 360 effortless
+    const maxX = points.length > 0 ? points[points.length - 1].x : 100;
+    dxf += "0\nLINE\n";
+    dxf += "5\n31\n";
+    dxf += "100\nAcDbEntity\n";
+    dxf += "8\nCENTERLINE\n";
+    dxf += "100\nAcDbLine\n";
+    dxf += "10\n0.0000\n20\n0.0000\n30\n0.0000\n";
+    dxf += `11\n${maxX.toFixed(4)}\n21\n0.0000\n31\n0.0000\n`;
 
     dxf += "0\nENDSEC\n0\nEOF\n";
     return dxf;
