@@ -49,17 +49,28 @@ function generateCSV(points, isHCD = false) {
 function generateDXF(points) {
     if (!points || points.length === 0) return "";
 
+    let minX = 0, minY = 0;
+    let maxX = 0, maxY = 0;
+    for (const p of points) {
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+    }
+
     let dxf = "0\nSECTION\n2\nHEADER\n";
     dxf += "9\n$ACADVER\n1\nAC1009\n"; // AutoCAD R12 format
     dxf += "9\n$INSUNITS\n70\n4\n";    // 4 = Millimeters
+    dxf += `9\n$EXTMIN\n10\n${minX.toFixed(4)}\n20\n${minY.toFixed(4)}\n30\n0.0000\n`;
+    dxf += `9\n$EXTMAX\n10\n${maxX.toFixed(4)}\n20\n${maxY.toFixed(4)}\n30\n0.0000\n`;
     dxf += "0\nENDSEC\n";
 
     // --- TABLES SECTION ---
     dxf += "0\nSECTION\n2\nTABLES\n";
 
-    // LTYPE Table
-    dxf += "0\nTABLE\n2\nLTYPE\n70\n1\n";
-    dxf += "0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n73\n0\n40\n0.0\n";
+    // LTYPE Table (BYBLOCK, BYLAYER, CONTINUOUS)
+    dxf += "0\nTABLE\n2\nLTYPE\n70\n3\n";
+    dxf += "0\nLTYPE\n2\nBYBLOCK\n70\n0\n3\n\n72\n65\n73\n0\n40\n0.0\n";
+    dxf += "0\nLTYPE\n2\nBYLAYER\n70\n0\n3\n\n72\n65\n73\n0\n40\n0.0\n";
+    dxf += "0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n72\n65\n73\n0\n40\n0.0\n";
     dxf += "0\nENDTAB\n";
 
     // LAYER Table (Layer '0' and Layer 'CENTERLINE')
@@ -95,7 +106,6 @@ function generateDXF(points) {
     dxf += "8\n0\n";
 
     // Add X-axis centerline
-    const maxX = points[points.length - 1].x;
     dxf += "0\nLINE\n";
     dxf += "8\nCENTERLINE\n";
     dxf += "10\n0.0000\n20\n0.0000\n30\n0.0000\n";
