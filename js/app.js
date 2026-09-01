@@ -262,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentPoints.length === 0) return;
         const dxf = HornExporters.generateDXF(currentPoints);
         const fileName = `${hornTypeSelect.value}_Profile.dxf`;
-        HornExporters.downloadFile(dxf, fileName, 'image/vnd.dxf');
+        HornExporters.downloadFile(dxf, fileName, 'application/dxf');
     });
 
     btnExportSTL.addEventListener('click', () => {

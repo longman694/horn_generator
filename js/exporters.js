@@ -5,15 +5,21 @@
 
 // Helper to trigger browser file download from string or ArrayBuffer
 function downloadFile(content, fileName, mimeType) {
-    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+    if (!content) {
+        console.error("downloadFile called with empty content.");
+        return;
+    }
+    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = fileName;
+    a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 100);
+    // Revoke URL after 10 seconds to allow async browser download to complete cleanly
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 /**
