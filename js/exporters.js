@@ -35,20 +35,61 @@ function generateCSV(points, isHCD = false) {
 }
 
 /**
- * Generate DXF string for 2D profile (Fusion 360 / AutoCAD compliant DXF R2000)
+ * Generate DXF string for 2D profile (Fully Compliant AutoCAD 2000 / R2000 AC1015)
+ * Includes required HEADER $HANDSEED, $INSUNITS, TABLES (LTYPE, LAYER, BLOCK_RECORD),
+ * BLOCKS (*Model_Space, *Paper_Space), and OBJECTS dictionary for strict CAD software like AutoCAD & Fusion 360.
  */
 function generateDXF(points) {
+    if (!points || points.length === 0) return "";
+
     let dxf = "0\nSECTION\n2\nHEADER\n";
-    dxf += "9\n$ACADVER\n1\nAC1015\n"; // AutoCAD 2000 format
-    dxf += "9\n$INSUNITS\n70\n4\n"; // 4 = Millimeters
+    dxf += "9\n$ACADVER\n1\nAC1015\n"; // AutoCAD 2000
+    dxf += "9\n$HANDSEED\n5\nFFFF\n";  // Handle seed
+    dxf += "9\n$INSUNITS\n70\n4\n";    // 4 = Millimeters
     dxf += "0\nENDSEC\n";
-    
-    dxf += "0\nSECTION\n2\nTABLES\n0\nENDSEC\n";
-    dxf += "0\nSECTION\n2\nBLOCKS\n0\nENDSEC\n";
-    
+
+    // --- TABLES SECTION ---
+    dxf += "0\nSECTION\n2\nTABLES\n";
+
+    // VPORT Table
+    dxf += "0\nTABLE\n2\nVPORT\n70\n0\n0\nENDTAB\n";
+
+    // LTYPE Table
+    dxf += "0\nTABLE\n2\nLTYPE\n70\n1\n";
+    dxf += "0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n73\n0\n40\n0.0\n";
+    dxf += "0\nENDTAB\n";
+
+    // LAYER Table (defining Layer '0' and Layer 'CENTERLINE')
+    dxf += "0\nTABLE\n2\nLAYER\n70\n2\n";
+    dxf += "0\nLAYER\n2\n0\n70\n0\n62\n7\n6\nCONTINUOUS\n";
+    dxf += "0\nLAYER\n2\nCENTERLINE\n70\n0\n62\n1\n6\nCONTINUOUS\n";
+    dxf += "0\nENDTAB\n";
+
+    // STYLE, VIEW, UCS, APPID, DIMSTYLE Tables
+    dxf += "0\nTABLE\n2\nSTYLE\n70\n0\n0\nENDTAB\n";
+    dxf += "0\nTABLE\n2\nVIEW\n70\n0\n0\nENDTAB\n";
+    dxf += "0\nTABLE\n2\nUCS\n70\n0\n0\nENDTAB\n";
+    dxf += "0\nTABLE\n2\nAPPID\n70\n1\n0\nAPPID\n2\nACAD\n70\n0\n0\nENDTAB\n";
+    dxf += "0\nTABLE\n2\nDIMSTYLE\n70\n0\n0\nENDTAB\n";
+
+    // BLOCK_RECORD Table (*Model_Space & *Paper_Space)
+    dxf += "0\nTABLE\n2\nBLOCK_RECORD\n70\n2\n";
+    dxf += "0\nBLOCK_RECORD\n2\n*Model_Space\n";
+    dxf += "0\nBLOCK_RECORD\n2\n*Paper_Space\n";
+    dxf += "0\nENDTAB\n";
+
+    dxf += "0\nENDSEC\n";
+
+    // --- BLOCKS SECTION ---
+    dxf += "0\nSECTION\n2\nBLOCKS\n";
+    dxf += "0\nBLOCK\n2\n*Model_Space\n70\n0\n10\n0.0\n20\n0.0\n30\n0.0\n0\nENDBLK\n";
+    dxf += "0\nBLOCK\n2\n*Paper_Space\n70\n0\n10\n0.0\n20\n0.0\n30\n0.0\n0\nENDBLK\n";
+    dxf += "0\nENDSEC\n";
+
+    // --- ENTITIES SECTION ---
     dxf += "0\nSECTION\n2\nENTITIES\n";
 
-    // Write LWPOLYLINE entity for the horn 2D profile with AcDb subclass markers for Fusion 360
+    // Write LWPOLYLINE entity for horn 2D profile
     dxf += "0\nLWPOLYLINE\n";
     dxf += "5\n30\n";                  // Entity handle
     dxf += "100\nAcDbEntity\n";        // Subclass marker
@@ -62,8 +103,8 @@ function generateDXF(points) {
         dxf += `20\n${p.y.toFixed(4)}\n`;
     }
 
-    // Add X-axis centerline from x=0 to x=max_x to make revolving in Fusion 360 effortless
-    const maxX = points.length > 0 ? points[points.length - 1].x : 100;
+    // Add X-axis centerline from x=0 to x=max_x
+    const maxX = points[points.length - 1].x;
     dxf += "0\nLINE\n";
     dxf += "5\n31\n";
     dxf += "100\nAcDbEntity\n";
@@ -72,7 +113,14 @@ function generateDXF(points) {
     dxf += "10\n0.0000\n20\n0.0000\n30\n0.0000\n";
     dxf += `11\n${maxX.toFixed(4)}\n21\n0.0000\n31\n0.0000\n`;
 
-    dxf += "0\nENDSEC\n0\nEOF\n";
+    dxf += "0\nENDSEC\n";
+
+    // --- OBJECTS SECTION ---
+    dxf += "0\nSECTION\n2\nOBJECTS\n";
+    dxf += "0\nDICTIONARY\n5\nC\n100\nAcDbDictionary\n281\n1\n";
+    dxf += "0\nENDSEC\n";
+
+    dxf += "0\nEOF\n";
     return dxf;
 }
 
