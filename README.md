@@ -1,5 +1,7 @@
 # Horn Generator
 
+🌐 **Live Demo**: [https://longman694.github.io/horn_generator/](https://longman694.github.io/horn_generator/)
+
 A parametric acoustic horn profile generator built in **pure HTML5, Vanilla CSS, and JavaScript**.
 
 Calculates exact 2D and 3D acoustic horn contours for loudspeaker design and provides real-time 3D WebGL preview alongside CAD vector (DXF) and 3D print mesh (STL, OBJ, OpenSCAD) exporters.
