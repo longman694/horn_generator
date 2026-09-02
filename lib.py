@@ -16,7 +16,8 @@ from plotly.subplots import make_subplots
 __all__ = (
     'create_2d_plot', 'create_3d_plot',
     'plot_demo', 'interpolate', 'generate_hcd_horn', 
-    'generate_osse_horn', 'generate_tractrix_horn',
+    'generate_osse_horn', 'calculate_target_mouth_radius', 'generate_osse_morphed_horn',
+    'generate_tractrix_horn',
     'generate_spherical_horn', 'generate_exponential_horn',
     'generate_excel', 'generate_dxf', 'generate_step',
 )
@@ -126,6 +127,138 @@ def generate_osse_horn(throat_radius, length, alpha=45, alpha_0=0, k=1.0, s=0.8,
         plot_demo(df['x (mm)'], df['y (mm)'])
         
     return df[['x (mm)', 'y (mm)']]
+
+
+def calculate_target_mouth_radius(phi, target_shape='none', target_width=0.0, target_height=0.0, corner_radius=0.0):
+    """
+    Calculates the target mouth outline radius r_M(phi) at polar angle phi (in radians).
+    phi=0 corresponds to positive x-axis (Major axis if width > height).
+    """
+    if target_shape in ('none', None, ''):
+        return 0.0
+
+    w = max(1.0, float(target_width) / 2.0)
+    h = max(1.0, float(target_height) / 2.0)
+
+    if target_shape == 'circle':
+        if abs(w - h) < 1e-6:
+            return w
+        else:
+            u = np.cos(phi)
+            v = np.sin(phi)
+            denom = np.sqrt((h * u)**2 + (w * v)**2)
+            return (w * h) / denom if denom > 1e-9 else w
+
+    elif target_shape == 'ellipse':
+        u = np.cos(phi)
+        v = np.sin(phi)
+        denom = np.sqrt((h * u)**2 + (w * v)**2)
+        return (w * h) / denom if denom > 1e-9 else w
+
+    elif target_shape == 'rectangle':
+        rc = min(float(corner_radius), w, h)
+        u = abs(np.cos(phi))
+        v = abs(np.sin(phi))
+
+        if rc <= 1e-6:
+            r_x = (w / u) if u > 1e-9 else float('inf')
+            r_y = (h / v) if v > 1e-9 else float('inf')
+            return min(r_x, r_y)
+        else:
+            xc = w - rc
+            yc = h - rc
+
+            if u > 1e-9:
+                r_v = w / u
+                if r_v * v <= yc + 1e-9:
+                    return r_v
+
+            if v > 1e-9:
+                r_h = h / v
+                if r_h * u <= xc + 1e-9:
+                    return r_h
+
+            B = u * xc + v * yc
+            C = xc**2 + yc**2 - rc**2
+            disc = B**2 - C
+            if disc < 0:
+                disc = 0
+            return B + np.sqrt(disc)
+
+    return 0.0
+
+
+def generate_osse_morphed_horn(
+    throat_radius, length, alpha=45, alpha_0=0, k=1.0, s=0.8, q=0.998, n=5,
+    target_shape='none', target_width=0.0, target_height=0.0, corner_radius=0.0,
+    fixed_part=0.0, morph_rate=3.0, allow_shrinkage=False,
+    num_points=50, num_angles=36
+):
+    """
+    Generates 3D morphed OS-SE waveguide grid and profile curves.
+    """
+    raw_df = generate_osse_horn(throat_radius, length, alpha, alpha_0, k, s, q, n, num_points, plot=False)
+    z = raw_df['x (mm)'].values
+    raw_r = raw_df['y (mm)'].values
+    raw_mouth_r = raw_r[-1]
+
+    if target_shape in ('none', None, ''):
+        target_width = raw_mouth_r * 2.0
+        target_height = raw_mouth_r * 2.0
+
+    phi_angles = np.linspace(0, 2 * np.PI if hasattr(np, 'PI') else 2 * np.pi, num_angles, endpoint=False)
+
+    r_M_angles = np.array([
+        calculate_target_mouth_radius(p, target_shape, target_width, target_height, corner_radius)
+        for p in phi_angles
+    ])
+
+    if target_shape in ('none', None, ''):
+        r_M_angles = np.full_like(phi_angles, raw_mouth_r)
+
+    if not allow_shrinkage and target_shape not in ('none', None, ''):
+        min_ratio = np.min(r_M_angles / max(1e-6, raw_mouth_r))
+        if min_ratio < 1.0 - 1e-6:
+            scale = 1.0 / min_ratio
+            r_M_angles *= scale
+            target_width *= scale
+            target_height *= scale
+
+    z_f = float(fixed_part) * float(length)
+    gamma = max(1.0, float(morph_rate))
+
+    r_matrix = np.zeros((num_points, num_angles))
+    for i in range(num_points):
+        zi = z[i]
+        if zi < z_f:
+            r_matrix[i, :] = raw_r[i]
+        else:
+            progress = (zi - z_f) / max(1e-6, length - z_f)
+            blend = progress ** gamma
+            r_matrix[i, :] = raw_r[i] + blend * (r_M_angles - raw_mouth_r)
+
+    r_major = r_matrix[:, 0]
+    idx_minor = int(round(num_angles * 0.25)) % num_angles
+    r_minor = r_matrix[:, idx_minor]
+    idx_corner = int(round(num_angles * 0.125)) % num_angles
+    r_corner = r_matrix[:, idx_corner]
+
+    df_major = pd.DataFrame({'x (mm)': z, 'y (mm)': r_major})
+    df_minor = pd.DataFrame({'x (mm)': z, 'y (mm)': r_minor})
+
+    return {
+        'z': z,
+        'raw_r': raw_r,
+        'r_major': r_major,
+        'r_minor': r_minor,
+        'r_corner': r_corner,
+        'r_matrix': r_matrix,
+        'phi_angles': phi_angles,
+        'df_major': df_major,
+        'df_minor': df_minor,
+        'target_width': target_width,
+        'target_height': target_height,
+    }
 
 
 def generate_tractrix_horn(throat_radius, cutoff_freq, num_points=10, plot=True):

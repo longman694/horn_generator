@@ -22,7 +22,7 @@ with st.sidebar:
     fold = False
 
     if horn_type == 'OS-SE':
-        length = st.number_input('Length (mm)', value=10, min_value=1, max_value=1000)
+        length = st.number_input('Length (mm)', value=100, min_value=1, max_value=1000)
         alpha = st.number_input('angle (degree)', value=45, min_value=10, max_value=80)
         alpha_0 = st.number_input('start angle (degree)', value=0, min_value=0, max_value=alpha)
         k = st.number_input('throat expansion factor', value=1.0, min_value=0.1, max_value=10.0,
@@ -33,29 +33,57 @@ with st.sidebar:
                             help='keeps the termination from extending unnecessarily')
         n = st.number_input('superellipse exponent', value=5, min_value=2, max_value=10, 
                             help='determines how gradual the termination is')
-        num_points = st.number_input('Number of points', value=10, min_value=1, max_value=100)
+        num_points = st.number_input('Number of points', value=30, min_value=10, max_value=200)
 
-        df = generate_osse_horn(throat_r, length, alpha, alpha_0, k, s, q, n, num_points=num_points, plot=False)
+        st.subheader("OS-SE Surface Morphing (Ath)")
+        target_shape = st.selectbox('Target Mouth Shape', options=['none', 'rectangle', 'ellipse', 'circle'], index=0)
+        
+        target_w = 300.0
+        target_h = 200.0
+        corner_r = 20.0
+        fixed_part = 0.0
+        morph_rate = 3.0
+        allow_shrinkage = False
+
+        if target_shape != 'none':
+            target_w = st.number_input('Target Width (mm)', value=300.0, min_value=10.0, max_value=2000.0)
+            target_h = st.number_input('Target Height (mm)', value=200.0, min_value=10.0, max_value=2000.0)
+            if target_shape == 'rectangle':
+                corner_r = st.number_input('Corner Radius (mm)', value=20.0, min_value=0.0, max_value=500.0)
+            fixed_part = st.slider('Fixed Throat Part (z_f / L)', min_value=0.0, max_value=0.9, value=0.0, step=0.05)
+            morph_rate = st.number_input('Morph Rate γ (Gamma)', value=3.0, min_value=1.0, max_value=10.0, step=0.5)
+            allow_shrinkage = st.checkbox('Allow Shrinkage', value=False)
+
+        morphed_res = generate_osse_morphed_horn(
+            throat_radius=throat_r, length=length, alpha=alpha, alpha_0=alpha_0,
+            k=k, s=s, q=q, n=n, target_shape=target_shape,
+            target_width=target_w, target_height=target_h, corner_radius=corner_r,
+            fixed_part=fixed_part, morph_rate=morph_rate, allow_shrinkage=allow_shrinkage,
+            num_points=num_points, num_angles=36
+        )
+
+        df = morphed_res['df_major']
+        enable_hcd = False
 
     elif horn_type == 'Tractrix':
-        num_points = st.number_input('Number of points', value=10, min_value=1, max_value=50)
-
+        num_points = st.number_input('Number of points', value=20, min_value=10, max_value=100)
         df = generate_tractrix_horn(throat_r, cutoff_f, num_points, plot=False)
+        st.divider()
+        enable_hcd = st.checkbox('HCD', value=False, help="Enable HCD mode")
 
     elif horn_type == 'Spherical':
         scale = st.number_input('Scale resolution (mm)', value=4.0, min_value=0.5, max_value=20.0, step=1.0)
         fold = st.checkbox('allow to fold', value=False)
         fold_back = st.checkbox('allow to fold back', value=True, disabled=not fold)
-
         df = generate_spherical_horn(throat_r, cutoff_f, scale, fold, fold_back, plot=False)
+        st.divider()
+        enable_hcd = st.checkbox('HCD', value=False, help="Enable HCD mode")
 
     elif horn_type == 'Exponential':
         scale = st.number_input('Scale resolution (mm)', value=4.0, min_value=0.5, max_value=20.0, step=1.0)
         df = generate_exponential_horn(throat_r, cutoff_f, scale, plot=False)
-
-    st.divider()
-
-    enable_hcd = st.checkbox('HCD', value=False, help="Enable HCD (Hybrid Constant Directivity) mode")
+        st.divider()
+        enable_hcd = st.checkbox('HCD', value=False, help="Enable HCD mode")
 
 download_render = st.form('download_render_form', border=False)
 submit = download_render.form_submit_button('Download')

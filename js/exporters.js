@@ -158,7 +158,49 @@ function generateOpenSCAD(points, isHCD = false, wallThickness = 2.0) {
 /**
  * Helper to build 3D mesh vertices and indices for solid Horn with wall thickness
  */
-function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRadial = 48) {
+/**
+ * Helper to compute radius at exact angle theta for any horn point p
+ */
+function getRadiusAtAngle(p, theta, isHCD) {
+    if (p.morphParams && p.morphParams.targetShape && p.morphParams.targetShape !== 'none') {
+        const m = p.morphParams;
+        const calcFn = typeof calculateTargetMouthRadius === 'function' 
+            ? calculateTargetMouthRadius 
+            : (typeof HornMath !== 'undefined' ? HornMath.calculateTargetMouthRadius : null);
+
+        if (calcFn) {
+            const rM = calcFn(theta, m.targetShape, m.targetWidth, m.targetHeight, m.cornerRadius);
+            if (p.x < m.fixedPart) {
+                return p.y;
+            } else {
+                const progress = (p.x - m.fixedPart) / Math.max(1e-6, m.length - m.fixedPart);
+                const blend = Math.pow(progress, m.morphRate);
+                return p.y + blend * (rM - m.rawMouthR);
+            }
+        }
+    }
+    
+    if (isHCD && p.a !== undefined && p.b !== undefined) {
+        const a = p.a;
+        const b = p.b;
+        const u = Math.cos(theta);
+        const v = Math.sin(theta);
+        const denom = Math.sqrt(Math.pow(b * u, 2) + Math.pow(a * v, 2));
+        return denom > 1e-9 ? (a * b) / denom : a;
+    }
+    
+    if (p.radii && p.radii.length > 0) {
+        const angleIdx = Math.round((theta / (2 * Math.PI)) * p.radii.length) % p.radii.length;
+        return p.radii[angleIdx];
+    }
+    
+    return p.y;
+}
+
+/**
+ * Helper to build 3D mesh vertices and indices for solid Horn with wall thickness
+ */
+function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRadial = 96) {
     const vertices = [];
     const triangles = [];
 
@@ -175,14 +217,18 @@ function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRa
     // Generate Inner Surface Vertices
     for (let i = 0; i < numPoints; i++) {
         const p = points[i];
-        const a = isHCD ? p.a : p.y;
-        const b = isHCD ? p.b : p.y;
 
         for (let j = 0; j < numRot; j++) {
             const theta = (j * 2 * Math.PI) / numRot;
+            const rInner = getRadiusAtAngle(p, theta, isHCD);
+
+            // Three.js Coordinate Alignment:
+            // X-axis: Axial horn length (throat -> mouth)
+            // Y-axis: Vertical height (sin theta)
+            // Z-axis: Horizontal width (cos theta)
             const x = p.x;
-            const y = a * Math.cos(theta);
-            const z = b * Math.sin(theta);
+            const y = rInner * Math.sin(theta);
+            const z = rInner * Math.cos(theta);
             vertices.push(x, y, z);
         }
     }
@@ -190,14 +236,15 @@ function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRa
     // Generate Outer Surface Vertices (offset by wallThickness)
     for (let i = 0; i < numPoints; i++) {
         const p = points[i];
-        const aOuter = (isHCD ? p.a : p.y) + wallThickness;
-        const bOuter = (isHCD ? p.b : p.y) + wallThickness;
 
         for (let j = 0; j < numRot; j++) {
             const theta = (j * 2 * Math.PI) / numRot;
+            const rInner = getRadiusAtAngle(p, theta, isHCD);
+            const rOuter = rInner + wallThickness;
+
             const x = p.x;
-            const y = aOuter * Math.cos(theta);
-            const z = bOuter * Math.sin(theta);
+            const y = rOuter * Math.sin(theta);
+            const z = rOuter * Math.cos(theta);
             vertices.push(x, y, z);
         }
     }

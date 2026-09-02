@@ -143,6 +143,175 @@ function generateOSSEHorn(throatRadius, length, alpha = 45, alpha0 = 0, k = 1.0,
 }
 
 /**
+ * Calculates Target Mouth Outline Radius r_M(phi) at polar angle phi (radians)
+ */
+function calculateTargetMouthRadius(phi, targetShape = 'none', targetWidth = 0.0, targetHeight = 0.0, cornerRadius = 0.0) {
+    if (!targetShape || targetShape === 'none') return 0.0;
+
+    let w = Math.max(1.0, parseFloat(targetWidth) / 2.0);
+    let h = Math.max(1.0, parseFloat(targetHeight) / 2.0);
+
+    if (targetShape === 'circle') {
+        if (Math.abs(w - h) < 1e-6) {
+            return w;
+        } else {
+            const u = Math.cos(phi);
+            const v = Math.sin(phi);
+            const denom = Math.sqrt(Math.pow(h * u, 2) + Math.pow(w * v, 2));
+            return denom > 1e-9 ? (w * h) / denom : w;
+        }
+    } else if (targetShape === 'ellipse') {
+        const u = Math.cos(phi);
+        const v = Math.sin(phi);
+        const denom = Math.sqrt(Math.pow(h * u, 2) + Math.pow(w * v, 2));
+        return denom > 1e-9 ? (w * h) / denom : w;
+    } else if (targetShape === 'rectangle') {
+        const rc = Math.min(parseFloat(cornerRadius) || 0.0, w, h);
+        const u = Math.abs(Math.cos(phi));
+        const v = Math.abs(Math.sin(phi));
+
+        if (rc <= 1e-6) {
+            const rx = u > 1e-9 ? w / u : Infinity;
+            const ry = v > 1e-9 ? h / v : Infinity;
+            return Math.min(rx, ry);
+        } else {
+            const xc = w - rc;
+            const yc = h - rc;
+
+            if (u > 1e-9) {
+                const rv = w / u;
+                if (rv * v <= yc + 1e-9) return rv;
+            }
+            if (v > 1e-9) {
+                const rh = h / v;
+                if (rh * u <= xc + 1e-9) return rh;
+            }
+
+            const B = u * xc + v * yc;
+            const C = xc * xc + yc * yc - rc * rc;
+            const disc = Math.max(0, B * B - C);
+            return B + Math.sqrt(disc);
+        }
+    }
+    return 0.0;
+}
+
+/**
+ * OS-SE Morphed Horn Profile Generator
+ */
+function generateOSSEMorphedHorn(
+    throatRadius, length, alpha = 45, alpha0 = 0, k = 1.0, s = 0.8, q = 0.998, n = 5,
+    targetShape = 'none', targetWidth = 0.0, targetHeight = 0.0, cornerRadius = 0.0,
+    fixedPart = 0.0, morphRate = 3.0, allowShrinkage = false,
+    numPoints = 50, numAngles = 96
+) {
+    const rawRes = generateOSSEHorn(throatRadius, length, alpha, alpha0, k, s, q, n, numPoints);
+    const rawPoints = rawRes.points;
+    const rawMouthR = rawPoints[rawPoints.length - 1].y;
+
+    if (!targetShape || targetShape === 'none') {
+        targetWidth = rawMouthR * 2.0;
+        targetHeight = rawMouthR * 2.0;
+    }
+
+    const phiAngles = [];
+    for (let a = 0; a < numAngles; a++) {
+        phiAngles.push((a * 2.0 * Math.PI) / numAngles);
+    }
+
+    let rMAngles = phiAngles.map(p => calculateTargetMouthRadius(p, targetShape, targetWidth, targetHeight, cornerRadius));
+
+    if (!targetShape || targetShape === 'none') {
+        rMAngles = phiAngles.map(() => rawMouthR);
+    }
+
+    if (!allowShrinkage && targetShape && targetShape !== 'none') {
+        let minRatio = 1.0;
+        for (let a = 0; a < numAngles; a++) {
+            const ratio = rMAngles[a] / Math.max(1e-6, rawMouthR);
+            if (ratio < minRatio) minRatio = ratio;
+        }
+        if (minRatio < 1.0 - 1e-6) {
+            const scale = 1.0 / minRatio;
+            rMAngles = rMAngles.map(r => r * scale);
+            targetWidth *= scale;
+            targetHeight *= scale;
+        }
+    }
+
+    const zf = parseFloat(fixedPart) * parseFloat(length);
+    const gamma = Math.max(1.0, parseFloat(morphRate));
+
+    const rMatrix = [];
+    for (let i = 0; i < numPoints; i++) {
+        const zi = rawPoints[i].x;
+        const rawRi = rawPoints[i].y;
+        const row = [];
+        for (let a = 0; a < numAngles; a++) {
+            if (zi < zf) {
+                row.push(rawRi);
+            } else {
+                const progress = (zi - zf) / Math.max(1e-6, length - zf);
+                const blend = Math.pow(progress, gamma);
+                row.push(rawRi + blend * (rMAngles[a] - rawMouthR));
+            }
+        }
+        rMatrix.push(row);
+    }
+
+    const idxMinor = Math.round(numAngles * 0.25) % numAngles;
+    const idxCorner = Math.round(numAngles * 0.125) % numAngles;
+
+    const pointsMajor = [];
+    const pointsMinor = [];
+    const pointsCorner = [];
+    const pointsMorphed = [];
+
+    for (let i = 0; i < numPoints; i++) {
+        const zi = rawPoints[i].x;
+        const rawRi = rawPoints[i].y;
+        const rMaj = rMatrix[i][0];
+        const rMin = rMatrix[i][idxMinor];
+        const rCor = rMatrix[i][idxCorner];
+
+        pointsMajor.push({ x: zi, y: rMaj });
+        pointsMinor.push({ x: zi, y: rMin });
+        pointsCorner.push({ x: zi, y: rCor });
+        pointsMorphed.push({
+            x: zi,
+            y: rawRi,
+            a: rMaj,
+            b: rMin,
+            corner: rCor,
+            radii: rMatrix[i],
+            morphParams: {
+                targetShape,
+                targetWidth,
+                targetHeight,
+                cornerRadius,
+                fixedPart: zf,
+                morphRate: gamma,
+                rawMouthR,
+                length
+            }
+        });
+    }
+
+    return {
+        rawPoints,
+        pointsMajor,
+        pointsMinor,
+        pointsCorner,
+        pointsMorphed,
+        rMatrix,
+        phiAngles,
+        calculatedFc: rawRes.calculatedFc,
+        targetWidth,
+        targetHeight
+    };
+}
+
+/**
  * Tractrix Horn Profile Generator
  */
 function generateTractrixHorn(throatRadius, cutoffFreq, numPoints = 10) {
@@ -355,6 +524,8 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         CubicSpline,
         generateOSSEHorn,
+        calculateTargetMouthRadius,
+        generateOSSEMorphedHorn,
         generateTractrixHorn,
         generateSphericalHorn,
         generateExponentialHorn,
@@ -364,6 +535,8 @@ if (typeof module !== 'undefined' && module.exports) {
     window.HornMath = {
         CubicSpline,
         generateOSSEHorn,
+        calculateTargetMouthRadius,
+        generateOSSEMorphedHorn,
         generateTractrixHorn,
         generateSphericalHorn,
         generateExponentialHorn,

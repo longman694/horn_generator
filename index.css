@@ -44,6 +44,22 @@ body {
     overflow-x: hidden;
 }
 
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: var(--border-highlight);
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-dim);
+}
+
 /* Header Navbar */
 .app-header {
     height: 60px;
@@ -112,6 +128,8 @@ body {
     grid-template-columns: 340px 1fr;
     flex: 1;
     min-height: calc(100vh - 60px);
+    align-items: stretch;
+    background: linear-gradient(to right, var(--bg-sidebar) 340px, var(--border-color) 340px, var(--border-color) 341px, transparent 341px);
 }
 
 /* Sidebar Parameters Panel */
@@ -119,8 +137,8 @@ body {
     background-color: var(--bg-sidebar);
     border-right: 1px solid var(--border-color);
     padding: 24px 20px;
-    overflow-y: auto;
-    max-height: calc(100vh - 60px);
+    align-self: stretch;
+    min-height: 100%;
 }
 
 .section-title {
@@ -225,10 +243,10 @@ body {
 /* Main Content Area */
 .main-content {
     padding: 24px;
-    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 24px;
+    min-height: 100%;
 }
 
 /* Toolbar & Export Bar */
@@ -388,11 +406,12 @@ tr:hover {
 /* Footer */
 .app-footer {
     text-align: center;
-    padding: 20px;
+    padding: 24px 20px;
     color: var(--text-dim);
     font-size: 0.85rem;
     border-top: 1px solid var(--border-color);
     background-color: var(--bg-sidebar);
+    width: 100%;
 }
 
 .app-footer a {
@@ -404,8 +423,10 @@ tr:hover {
 @media (max-width: 900px) {
     .app-container {
         grid-template-columns: 1fr;
+        background: none;
     }
     .sidebar {
-        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
     }
 }

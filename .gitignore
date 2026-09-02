@@ -92,3 +92,5 @@ ipython_config.py
 #   git rm -r .ipynb_checkpoints/
 
 __pycache__
+ath-2025-06/
+.venv/

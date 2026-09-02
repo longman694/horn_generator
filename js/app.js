@@ -37,7 +37,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const exponentialParams = document.getElementById('exponential-params');
     const scaleExpInput = document.getElementById('scale-exp');
 
+    // OS-SE Morphing Inputs
+    const osseMorphSection = document.getElementById('osse-morph-section');
+    const morphTargetShapeSelect = document.getElementById('morph-target-shape');
+    const morphOptionsDiv = document.getElementById('morph-options');
+    const morphTargetWidthInput = document.getElementById('morph-target-width');
+    const morphTargetHeightInput = document.getElementById('morph-target-height');
+    const morphCornerRadiusInput = document.getElementById('morph-corner-radius');
+    const groupMorphCorner = document.getElementById('group-morph-corner');
+    const morphFixedPartInput = document.getElementById('morph-fixed-part');
+    const morphRateInput = document.getElementById('morph-rate');
+    const morphAllowShrinkageCheck = document.getElementById('morph-allow-shrinkage');
+
     // HCD Inputs
+    const hcdSection = document.getElementById('hcd-section');
     const enableHCDCheck = document.getElementById('enable-hcd');
     const hcdParams = document.getElementById('hcd-params');
     const mouthRatioInput = document.getElementById('mouth-ratio');
@@ -69,7 +82,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const viewer2D = new Horn2DViewer('chart-2d', 'chart-hcd-transition');
 
     let currentPoints = [];
+    let currentResult = null;
     let currentIsHCD = false;
+    let currentIsMorph = false;
 
     // --- Dynamic Form Visibility Update ---
     function updateFormVisibility() {
@@ -85,26 +100,42 @@ document.addEventListener('DOMContentLoaded', () => {
             cutoffGroup.style.display = 'none';
             osseFcBadge.style.display = 'flex';
             osseParams.style.display = 'block';
+
+            if (osseMorphSection) osseMorphSection.style.display = 'block';
+            if (hcdSection) hcdSection.style.display = 'none';
         } else {
             cutoffGroup.style.display = 'block';
             osseFcBadge.style.display = 'none';
+
+            if (osseMorphSection) osseMorphSection.style.display = 'none';
+            if (hcdSection) hcdSection.style.display = 'block';
 
             if (type === 'Tractrix') tractrixParams.style.display = 'block';
             else if (type === 'Spherical') sphericalParams.style.display = 'block';
             else if (type === 'Exponential') exponentialParams.style.display = 'block';
         }
 
-        // HCD Params Visibility
-        hcdParams.style.display = enableHCDCheck.checked ? 'block' : 'none';
-
-        // DXF Export availability (Only available in circular mode for full DXF spline)
-        if (enableHCDCheck.checked) {
-            btnExportDXF.disabled = true;
-            btnExportDXF.title = 'DXF export is available for circular 2D profiles.';
-        } else {
-            btnExportDXF.disabled = false;
-            btnExportDXF.title = '';
+        // Morph options sub-visibility
+        if (morphTargetShapeSelect && morphOptionsDiv) {
+            const shape = morphTargetShapeSelect.value;
+            if (shape !== 'none') {
+                morphOptionsDiv.style.display = 'block';
+                if (groupMorphCorner) {
+                    groupMorphCorner.style.display = (shape === 'rectangle') ? 'block' : 'none';
+                }
+            } else {
+                morphOptionsDiv.style.display = 'none';
+            }
         }
+
+        // HCD Params Visibility
+        if (enableHCDCheck && hcdParams) {
+            hcdParams.style.display = enableHCDCheck.checked ? 'block' : 'none';
+        }
+
+        // DXF Export availability
+        btnExportDXF.disabled = false;
+        btnExportDXF.title = '';
     }
 
     // --- Main Update Function ---
@@ -117,6 +148,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const wallThickness = parseFloat(wallThicknessInput.value) || 2.0;
 
         let result = { points: [] };
+        let isHCD = false;
+        let isMorph = false;
 
         try {
             if (type === 'OS-SE') {
@@ -129,11 +162,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 const n = parseFloat(nExponentInput.value) || 5;
                 const numPoints = parseInt(numPointsOsseInput.value) || 20;
 
-                result = HornMath.generateOSSEHorn(throatR, length, alpha, alpha0, k, s, q, n, numPoints);
+                const targetShape = morphTargetShapeSelect ? morphTargetShapeSelect.value : 'none';
+                const targetWidth = parseFloat(morphTargetWidthInput.value) || 300;
+                const targetHeight = parseFloat(morphTargetHeightInput.value) || 200;
+                const cornerRadius = parseFloat(morphCornerRadiusInput.value) || 20;
+                const fixedPart = parseFloat(morphFixedPartInput.value) || 0.0;
+                const morphRate = parseFloat(morphRateInput.value) || 3.0;
+                const allowShrinkage = morphAllowShrinkageCheck ? morphAllowShrinkageCheck.checked : false;
+
+                result = HornMath.generateOSSEMorphedHorn(
+                    throatR, length, alpha, alpha0, k, s, q, n,
+                    targetShape, targetWidth, targetHeight, cornerRadius,
+                    fixedPart, morphRate, allowShrinkage,
+                    numPoints, 96
+                );
 
                 if (result.calculatedFc) {
                     osseFcVal.textContent = `${Math.round(result.calculatedFc).toLocaleString()} Hz`;
                 }
+
+                isMorph = targetShape !== 'none';
             } else if (type === 'Tractrix') {
                 const numPoints = parseInt(numPointsTractrixInput.value) || 20;
                 result = HornMath.generateTractrixHorn(throatR, cutoffF, numPoints);
@@ -152,11 +200,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        let finalPoints = result.points;
-        const isHCD = enableHCDCheck.checked;
-        currentIsHCD = isHCD;
+        let finalPoints = result.pointsMorphed || result.points || [];
 
-        if (isHCD && finalPoints.length > 0) {
+        if (type !== 'OS-SE' && enableHCDCheck && enableHCDCheck.checked && finalPoints.length > 0) {
+            isHCD = true;
             const mouthRatio = parseFloat(mouthRatioInput.value) || 1.7;
             const mode = hcdModeSelect.value;
             const acc = parseFloat(hcdAccInput.value) || 1.0;
@@ -166,20 +213,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         currentPoints = finalPoints;
+        currentResult = result;
+        currentIsHCD = isHCD;
+        currentIsMorph = isMorph;
 
         // Update 2D Chart
-        viewer2D.updateChart(finalPoints, isHCD);
+        viewer2D.updateChart(result.pointsMorphed ? result : finalPoints, isHCD, isMorph);
 
         // Update 3D Mesh Viewport
         viewer3D.updateMesh(finalPoints, isHCD, wallThickness);
 
         // Populate Table
-        renderTable(finalPoints, isHCD);
+        renderTable(finalPoints, isHCD, isMorph);
     }
 
     // --- Render Data Table ---
-    function renderTable(points, isHCD) {
-        if (isHCD) {
+    function renderTable(points, isHCD, isMorph) {
+        if (isMorph) {
+            tableHead.innerHTML = `
+                <th>#</th>
+                <th>x (mm)</th>
+                <th>Major a (mm)</th>
+                <th>Minor b (mm)</th>
+                <th>Corner r (mm)</th>
+            `;
+        } else if (isHCD) {
             tableHead.innerHTML = `
                 <th>#</th>
                 <th>x (mm)</th>
@@ -198,7 +256,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let bodyHtml = '';
         points.forEach((p, idx) => {
-            if (isHCD) {
+            if (isMorph) {
+                bodyHtml += `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td>${p.x.toFixed(3)}</td>
+                        <td>${(p.a || p.y).toFixed(3)}</td>
+                        <td>${(p.b || p.y).toFixed(3)}</td>
+                        <td>${(p.corner || p.y).toFixed(3)}</td>
+                    </tr>
+                `;
+            } else if (isHCD) {
                 bodyHtml += `
                     <tr>
                         <td>${idx + 1}</td>

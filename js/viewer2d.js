@@ -11,26 +11,62 @@ class Horn2DViewer {
         this.transitionChart = null;
     }
 
-    updateChart(points, isHCD = false) {
+    updateChart(pointsData, isHCD = false, isMorph = false) {
         if (!this.canvas) return;
 
         const ctx = this.canvas.getContext('2d');
-
         const datasets = [];
 
-        if (!isHCD) {
+        // Check if pointsData is OS-SE Morphing result object
+        if (isMorph || (pointsData && pointsData.pointsMajor && pointsData.pointsMinor)) {
+            const raw = pointsData.rawPoints || [];
+            const major = pointsData.pointsMajor || [];
+            const minor = pointsData.pointsMinor || [];
+            const corner = pointsData.pointsCorner || [];
+
             datasets.push({
-                label: 'Horn Profile Radius y (mm)',
-                data: points.map(p => ({ x: p.x, y: p.y })),
+                label: 'Raw OS-SE Reference y (mm)',
+                data: raw.map(p => ({ x: p.x, y: p.y })),
+                borderColor: '#94a3b8',
+                borderDash: [4, 4],
+                borderWidth: 2,
+                fill: false,
+                pointRadius: 2
+            });
+
+            datasets.push({
+                label: 'Major Axis (ϕ=0°)',
+                data: major.map(p => ({ x: p.x, y: p.y })),
+                borderColor: '#f43f5e',
+                backgroundColor: 'rgba(244, 63, 94, 0.1)',
+                borderWidth: 2.5,
+                fill: false,
+                pointRadius: 3
+            });
+
+            datasets.push({
+                label: 'Minor Axis (ϕ=90°)',
+                data: minor.map(p => ({ x: p.x, y: p.y })),
                 borderColor: '#38bdf8',
                 backgroundColor: 'rgba(56, 189, 248, 0.1)',
                 borderWidth: 2.5,
-                fill: true,
-                pointRadius: 3,
-                pointHoverRadius: 6,
-                tension: 0.2
+                fill: false,
+                pointRadius: 3
             });
-        } else {
+
+            if (corner && corner.length > 0) {
+                datasets.push({
+                    label: 'Corner Axis (ϕ=45°)',
+                    data: corner.map(p => ({ x: p.x, y: p.y })),
+                    borderColor: '#f59e0b',
+                    borderDash: [2, 2],
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 2
+                });
+            }
+        } else if (isHCD) {
+            const points = Array.isArray(pointsData) ? pointsData : (pointsData.points || []);
             datasets.push({
                 label: 'Circular Reference Radius y (mm)',
                 data: points.map(p => ({ x: p.x, y: p.y })),
@@ -59,6 +95,19 @@ class Horn2DViewer {
                 borderWidth: 2.5,
                 fill: false,
                 pointRadius: 3
+            });
+        } else {
+            const points = Array.isArray(pointsData) ? pointsData : (pointsData.points || []);
+            datasets.push({
+                label: 'Horn Profile Radius y (mm)',
+                data: points.map(p => ({ x: p.x, y: p.y })),
+                borderColor: '#38bdf8',
+                backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                borderWidth: 2.5,
+                fill: true,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                tension: 0.2
             });
         }
 

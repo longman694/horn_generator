@@ -1,16 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Horn Profile Generator - Pure HTML & JavaScript</title>
-    <meta name="description" content="Parametric acoustic horn profile generator in pure HTML and JavaScript. Calculates OS-SE, Tractrix, Spherical, Exponential, and HCD horn profiles with 3D WebGL preview and CAD DXF/STL exports.">
-    <link rel="stylesheet" href="index.css">
-    
+    <meta name="description"
+        content="Parametric acoustic horn profile generator in pure HTML and JavaScript. Calculates OS-SE, Tractrix, Spherical, Exponential, and HCD horn profiles with 3D WebGL preview and CAD DXF/STL exports.">
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="favicon.png">
+
+    <link rel="stylesheet" href="index.css?v=3">
+
     <!-- Three.js & OrbitControls CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    
+
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -20,17 +28,22 @@
     <script src="js/viewer3d.js"></script>
     <script src="js/viewer2d.js"></script>
 </head>
+
 <body>
 
     <!-- Header Navbar -->
     <header class="app-header">
         <div class="brand">
-            <div class="brand-icon">🎺</div>
+            <img src="favicon.svg" width="32" height="32" alt="Horn Icon" style="border-radius: 7px; box-shadow: 0 0 12px var(--primary-glow);" />
             <div class="brand-title">Horn Generator</div>
         </div>
         <div class="header-links">
             <a href="https://github.com/longman694/horn_generator" target="_blank" rel="noopener" class="header-link">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path
+                        d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22">
+                    </path>
+                </svg>
                 GitHub Repository
             </a>
         </div>
@@ -38,7 +51,7 @@
 
     <!-- Main App Container -->
     <div class="app-container">
-        
+
         <!-- Sidebar Controls -->
         <aside class="sidebar">
             <div class="section-title">Horn Configuration</div>
@@ -79,7 +92,7 @@
             <div id="osse-params">
                 <div class="form-group">
                     <label class="form-label" for="length">Length (mm)</label>
-                    <input type="number" id="length" class="form-control" value="10" min="1" max="1000" step="1">
+                    <input type="number" id="length" class="form-control" value="50" min="1" max="1000" step="1">
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="alpha">Coverage Angle α (degree)</label>
@@ -90,7 +103,8 @@
                     <input type="number" id="alpha-0" class="form-control" value="0" min="0" max="45" step="1">
                 </div>
                 <div class="form-group">
-                    <label class="form-label" for="k-factor">Throat Expansion Factor k <small>('1' is pure OS)</small></label>
+                    <label class="form-label" for="k-factor">Throat Expansion Factor k <small>('1' is pure
+                            OS)</small></label>
                     <input type="number" id="k-factor" class="form-control" value="1.0" min="0.1" max="10.0" step="0.1">
                 </div>
                 <div class="form-group">
@@ -99,7 +113,8 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="q-coeff">Truncation Coeff q</label>
-                    <input type="number" id="q-coeff" class="form-control" value="0.998" min="0.9" max="1.0" step="0.001">
+                    <input type="number" id="q-coeff" class="form-control" value="0.998" min="0.9" max="1.0"
+                        step="0.001">
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="n-exponent">Superellipse Exponent n</label>
@@ -107,7 +122,8 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="num-points-osse">Number of Points</label>
-                    <input type="number" id="num-points-osse" class="form-control" value="20" min="5" max="200" step="1">
+                    <input type="number" id="num-points-osse" class="form-control" value="20" min="5" max="200"
+                        step="1">
                 </div>
             </div>
 
@@ -115,7 +131,8 @@
             <div id="tractrix-params" style="display: none;">
                 <div class="form-group">
                     <label class="form-label" for="num-points-tractrix">Number of Points</label>
-                    <input type="number" id="num-points-tractrix" class="form-control" value="20" min="5" max="100" step="1">
+                    <input type="number" id="num-points-tractrix" class="form-control" value="20" min="5" max="100"
+                        step="1">
                 </div>
             </div>
 
@@ -123,7 +140,8 @@
             <div id="spherical-params" style="display: none;">
                 <div class="form-group">
                     <label class="form-label" for="scale-spherical">Scale Resolution (mm)</label>
-                    <input type="number" id="scale-spherical" class="form-control" value="4.0" min="0.5" max="20.0" step="0.5">
+                    <input type="number" id="scale-spherical" class="form-control" value="4.0" min="0.5" max="20.0"
+                        step="0.5">
                 </div>
                 <label class="checkbox-group">
                     <input type="checkbox" id="fold-spherical">
@@ -139,38 +157,90 @@
             <div id="exponential-params" style="display: none;">
                 <div class="form-group">
                     <label class="form-label" for="scale-exp">Scale Resolution (mm)</label>
-                    <input type="number" id="scale-exp" class="form-control" value="4.0" min="0.5" max="20.0" step="0.5">
+                    <input type="number" id="scale-exp" class="form-control" value="4.0" min="0.5" max="20.0"
+                        step="0.5">
                 </div>
             </div>
 
-            <div class="divider"></div>
+            <!-- OS-SE Morphing Controls (Visible when OS-SE selected) -->
+            <div id="osse-morph-section">
+                <div class="divider"></div>
+                <div class="section-title">OS-SE Surface Morphing (Ath)</div>
 
-            <!-- HCD Toggle & Parameters -->
-            <div class="section-title">HCD (Hybrid Constant Directivity)</div>
-            <label class="checkbox-group">
-                <input type="checkbox" id="enable-hcd">
-                <span class="checkbox-label">Enable HCD Mode</span>
-            </label>
-
-            <div id="hcd-params" style="display: none;">
                 <div class="form-group">
-                    <label class="form-label" for="mouth-ratio">Mouth Ratio</label>
-                    <input type="number" id="mouth-ratio" class="form-control" value="1.7" min="1.0" max="3.0" step="0.1">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="hcd-mode">HCD Mode Curve</label>
-                    <select id="hcd-mode" class="form-select">
-                        <option value="linear" selected>Linear</option>
-                        <option value="para">Parabolic</option>
-                        <option value="exp">Exponential</option>
-                        <option value="log">Logarithmic</option>
-                        <option value="hyper">Hyperbolic</option>
-                        <option value="logistic">Logistic</option>
+                    <label class="form-label" for="morph-target-shape">Target Mouth Shape</label>
+                    <select id="morph-target-shape" class="form-select">
+                        <option value="none" selected>None (Raw OS-SE Shape)</option>
+                        <option value="rectangle">Rounded Rectangle</option>
+                        <option value="ellipse">Ellipse / Oval</option>
+                        <option value="circle">Circle</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label class="form-label" for="hcd-acc">Accelerate Factor</label>
-                    <input type="number" id="hcd-acc" class="form-control" value="1.0" min="1.0" max="2.0" step="0.1">
+
+                <div id="morph-options" style="display: none;">
+                    <div class="form-group">
+                        <label class="form-label" for="morph-target-width">Target Width (mm)</label>
+                        <input type="number" id="morph-target-width" class="form-control" value="300" min="10"
+                            max="2000" step="5">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="morph-target-height">Target Height (mm)</label>
+                        <input type="number" id="morph-target-height" class="form-control" value="200" min="10"
+                            max="2000" step="5">
+                    </div>
+                    <div class="form-group" id="group-morph-corner">
+                        <label class="form-label" for="morph-corner-radius">Corner Radius (mm)</label>
+                        <input type="number" id="morph-corner-radius" class="form-control" value="20" min="0" max="500"
+                            step="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="morph-fixed-part">Fixed Throat Part (z_f / L)</label>
+                        <input type="number" id="morph-fixed-part" class="form-control" value="0.0" min="0.0" max="0.9"
+                            step="0.05">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="morph-rate">Morph Rate γ (Gamma)</label>
+                        <input type="number" id="morph-rate" class="form-control" value="3.0" min="1.0" max="10.0"
+                            step="0.5">
+                    </div>
+                    <label class="checkbox-group">
+                        <input type="checkbox" id="morph-allow-shrinkage">
+                        <span class="checkbox-label">Allow Shrinkage</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- HCD Toggle & Parameters (Hidden when OS-SE selected) -->
+            <div id="hcd-section" style="display: none;">
+                <div class="divider"></div>
+                <div class="section-title">HCD (Hybrid Constant Directivity)</div>
+                <label class="checkbox-group">
+                    <input type="checkbox" id="enable-hcd">
+                    <span class="checkbox-label">Enable HCD Mode</span>
+                </label>
+
+                <div id="hcd-params" style="display: none;">
+                    <div class="form-group">
+                        <label class="form-label" for="mouth-ratio">Mouth Ratio</label>
+                        <input type="number" id="mouth-ratio" class="form-control" value="1.7" min="1.0" max="3.0"
+                            step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="hcd-mode">HCD Mode Curve</label>
+                        <select id="hcd-mode" class="form-select">
+                            <option value="linear" selected>Linear</option>
+                            <option value="para">Parabolic</option>
+                            <option value="exp">Exponential</option>
+                            <option value="log">Logarithmic</option>
+                            <option value="hyper">Hyperbolic</option>
+                            <option value="logistic">Logistic</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="hcd-acc">Accelerate Factor</label>
+                        <input type="number" id="hcd-acc" class="form-control" value="1.0" min="1.0" max="2.0"
+                            step="0.1">
+                    </div>
                 </div>
             </div>
 
@@ -180,36 +250,62 @@
             <div class="section-title">3D Solid Modeling Settings</div>
             <div class="form-group">
                 <label class="form-label" for="wall-thickness">Wall Thickness (mm)</label>
-                <input type="number" id="wall-thickness" class="form-control" value="2.0" min="0.5" max="20.0" step="0.5">
+                <input type="number" id="wall-thickness" class="form-control" value="2.0" min="0.5" max="20.0"
+                    step="0.5">
             </div>
 
         </aside>
 
         <!-- Main Content Area -->
         <main class="main-content">
-            
+
             <!-- Export Action Bar -->
             <div class="action-bar">
                 <div class="action-title">Export CAD / 3D Models</div>
                 <div class="export-buttons">
                     <button id="btn-export-dxf" class="btn btn-secondary">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
                         DXF (2D)
                     </button>
                     <button id="btn-export-stl" class="btn btn-primary">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
                         STL (3D Mesh)
                     </button>
                     <button id="btn-export-obj" class="btn btn-secondary">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
                         OBJ (3D)
                     </button>
                     <button id="btn-export-scad" class="btn btn-secondary">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                        </svg>
                         OpenSCAD
                     </button>
                     <button id="btn-export-csv" class="btn btn-secondary">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                        </svg>
                         CSV Data
                     </button>
                 </div>
@@ -273,16 +369,16 @@
                     </table>
                 </div>
             </div>
-
         </main>
     </div>
 
     <!-- Footer -->
     <footer class="app-footer">
-        Napat Charoenlarpkul's Horn Generator &copy; 2025 | Pure HTML & JavaScript Rewrite
+        Napat Charoenlarpkul's Horn Generator &copy; 2026 | Pure HTML & JavaScript Rewrite
     </footer>
 
     <!-- Main Coordinator App Script -->
     <script src="js/app.js"></script>
 </body>
+
 </html>

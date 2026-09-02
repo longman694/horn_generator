@@ -108,7 +108,7 @@ class Horn3DViewer {
         }
 
         // Build raw mesh geometry using Exporters helper
-        const { vertices, triangles } = HornExporters.buildHornMeshGeometry(points, isHCD, wallThickness, 48);
+        const { vertices, triangles } = HornExporters.buildHornMeshGeometry(points, isHCD, wallThickness, 96);
 
         const geometry = new THREE.BufferGeometry();
 
