@@ -23,10 +23,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- Custom Modules -->
-    <script src="js/horn_math.js"></script>
-    <script src="js/exporters.js"></script>
-    <script src="js/viewer3d.js"></script>
-    <script src="js/viewer2d.js"></script>
+    <script src="js/horn_math.js?v=20260903_v6"></script>
+    <script src="js/exporters.js?v=20260903_v6"></script>
+    <script src="js/viewer3d.js?v=20260903_v6"></script>
+    <script src="js/viewer2d.js?v=20260903_v6"></script>
 </head>
 
 <body>
@@ -162,15 +162,15 @@
                 </div>
             </div>
 
-            <!-- OS-SE Morphing Controls (Visible when OS-SE selected) -->
+            <!-- Surface Morphing Controls (Ath) -->
             <div id="osse-morph-section">
                 <div class="divider"></div>
-                <div class="section-title">OS-SE Surface Morphing (Ath)</div>
+                <div class="section-title">Surface Morphing (Ath)</div>
 
                 <div class="form-group">
                     <label class="form-label" for="morph-target-shape">Target Mouth Shape</label>
                     <select id="morph-target-shape" class="form-select">
-                        <option value="none" selected>None (Raw OS-SE Shape)</option>
+                        <option value="none" selected>None (Raw Circular Profile)</option>
                         <option value="rectangle">Rounded Rectangle</option>
                         <option value="ellipse">Ellipse / Oval</option>
                         <option value="circle">Circle</option>
@@ -178,13 +178,13 @@
                 </div>
 
                 <div id="morph-options" style="display: none;">
-                    <div class="form-group">
-                        <label class="form-label" for="morph-target-width">Target Width (mm)</label>
+                    <div class="form-group" id="group-morph-width">
+                        <label class="form-label" id="label-morph-width" for="morph-target-width">Target Width (mm)</label>
                         <input type="number" id="morph-target-width" class="form-control" value="300" min="10"
                             max="2000" step="5">
                     </div>
-                    <div class="form-group">
-                        <label class="form-label" for="morph-target-height">Target Height (mm)</label>
+                    <div class="form-group" id="group-morph-height">
+                        <label class="form-label" id="label-morph-height" for="morph-target-height">Target Height (mm)</label>
                         <input type="number" id="morph-target-height" class="form-control" value="200" min="10"
                             max="2000" step="5">
                     </div>
@@ -340,7 +340,7 @@
             </div>
 
             <!-- HCD Mouth Ratio Transition Graph -->
-            <div class="viewport-card" style="display: none;">
+            <div class="viewport-card" id="card-hcd-transition" style="display: none;">
                 <div class="viewport-header">
                     <div class="viewport-title">
                         <span>📊 HCD Mouth Ratio Transition</span>
@@ -378,7 +378,7 @@
     </footer>
 
     <!-- Main Coordinator App Script -->
-    <script src="js/app.js"></script>
+    <script src="js/app.js?v=20260903_v6"></script>
 </body>
 
 </html>

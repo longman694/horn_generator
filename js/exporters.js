@@ -25,15 +25,21 @@ function downloadFile(content, fileName, mimeType) {
 /**
  * Generate CSV text from points data
  */
-function generateCSV(points, isHCD = false) {
-    let csv = isHCD
-        ? "x (mm),y (mm),a (mm),b (mm),mouth_ratio\n"
-        : "x (mm),y (mm)\n";
-
-    for (const p of points) {
-        if (isHCD) {
-            csv += `${p.x.toFixed(4)},${p.y.toFixed(4)},${p.a.toFixed(4)},${p.b.toFixed(4)},${p.mouthRatio.toFixed(4)}\n`;
-        } else {
+function generateCSV(points, isHCD = false, isMorph = false) {
+    let csv = "";
+    if (isMorph) {
+        csv = "x (mm),y (mm),major_a (mm),minor_b (mm),corner_r (mm)\n";
+        for (const p of points) {
+            csv += `${p.x.toFixed(4)},${p.y.toFixed(4)},${(p.a || p.y).toFixed(4)},${(p.b || p.y).toFixed(4)},${(p.corner || p.y).toFixed(4)}\n`;
+        }
+    } else if (isHCD) {
+        csv = "x (mm),y (mm),a (mm),b (mm),mouth_ratio\n";
+        for (const p of points) {
+            csv += `${p.x.toFixed(4)},${p.y.toFixed(4)},${p.a.toFixed(4)},${p.b.toFixed(4)},${(p.mouthRatio || 1.0).toFixed(4)}\n`;
+        }
+    } else {
+        csv = "x (mm),y (mm)\n";
+        for (const p of points) {
             csv += `${p.x.toFixed(4)},${p.y.toFixed(4)}\n`;
         }
     }
@@ -162,6 +168,23 @@ function generateOpenSCAD(points, isHCD = false, wallThickness = 2.0) {
  * Helper to compute radius at exact angle theta for any horn point p
  */
 function getRadiusAtAngle(p, theta, isHCD) {
+    if (isHCD && p.a !== undefined && p.b !== undefined) {
+        const a = p.a;
+        const b = p.b;
+        const u = Math.cos(theta);
+        const v = Math.sin(theta);
+        const denom = Math.sqrt(Math.pow(b * u, 2) + Math.pow(a * v, 2));
+        return denom > 1e-9 ? (a * b) / denom : a;
+    }
+
+    if (p.radii && p.radii.length > 0) {
+        const numA = p.radii.length;
+        let normTheta = theta % (2 * Math.PI);
+        if (normTheta < 0) normTheta += 2 * Math.PI;
+        const angleIdx = Math.round((normTheta / (2 * Math.PI)) * numA) % numA;
+        return p.radii[angleIdx];
+    }
+
     if (p.morphParams && p.morphParams.targetShape && p.morphParams.targetShape !== 'none') {
         const m = p.morphParams;
         const calcFn = typeof calculateTargetMouthRadius === 'function' 
@@ -178,20 +201,6 @@ function getRadiusAtAngle(p, theta, isHCD) {
                 return p.y + blend * (rM - m.rawMouthR);
             }
         }
-    }
-    
-    if (isHCD && p.a !== undefined && p.b !== undefined) {
-        const a = p.a;
-        const b = p.b;
-        const u = Math.cos(theta);
-        const v = Math.sin(theta);
-        const denom = Math.sqrt(Math.pow(b * u, 2) + Math.pow(a * v, 2));
-        return denom > 1e-9 ? (a * b) / denom : a;
-    }
-    
-    if (p.radii && p.radii.length > 0) {
-        const angleIdx = Math.round((theta / (2 * Math.PI)) * p.radii.length) % p.radii.length;
-        return p.radii[angleIdx];
     }
     
     return p.y;

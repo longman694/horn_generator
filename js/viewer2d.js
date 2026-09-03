@@ -16,8 +16,9 @@ class Horn2DViewer {
 
         const ctx = this.canvas.getContext('2d');
         const datasets = [];
+        const points = Array.isArray(pointsData) ? pointsData : (pointsData.pointsMorphed || pointsData.points || []);
 
-        // Check if pointsData is OS-SE Morphing result object
+        // Check if pointsData is Morphing result object
         if (isMorph || (pointsData && pointsData.pointsMajor && pointsData.pointsMinor)) {
             const raw = pointsData.rawPoints || [];
             const major = pointsData.pointsMajor || [];
@@ -25,7 +26,7 @@ class Horn2DViewer {
             const corner = pointsData.pointsCorner || [];
 
             datasets.push({
-                label: 'Raw OS-SE Reference y (mm)',
+                label: 'Base Horn Reference y (mm)',
                 data: raw.map(p => ({ x: p.x, y: p.y })),
                 borderColor: '#94a3b8',
                 borderDash: [4, 4],
@@ -66,7 +67,6 @@ class Horn2DViewer {
                 });
             }
         } else if (isHCD) {
-            const points = Array.isArray(pointsData) ? pointsData : (pointsData.points || []);
             datasets.push({
                 label: 'Circular Reference Radius y (mm)',
                 data: points.map(p => ({ x: p.x, y: p.y })),
@@ -97,7 +97,6 @@ class Horn2DViewer {
                 pointRadius: 3
             });
         } else {
-            const points = Array.isArray(pointsData) ? pointsData : (pointsData.points || []);
             datasets.push({
                 label: 'Horn Profile Radius y (mm)',
                 data: points.map(p => ({ x: p.x, y: p.y })),
@@ -128,7 +127,7 @@ class Horn2DViewer {
                 plugins: {
                     title: {
                         display: true,
-                        text: isHCD ? '2D HCD Horn Profile Comparison' : '2D Horn Profile Contour',
+                        text: isHCD ? '2D HCD Horn Profile Comparison' : (isMorph ? '2D Morphed Horn Profile Comparison' : '2D Horn Profile Contour'),
                         color: '#f8fafc',
                         font: { size: 16, weight: 'bold', family: 'Inter, system-ui, sans-serif' }
                     },
@@ -167,7 +166,10 @@ class Horn2DViewer {
         });
 
         // Update Transition Chart if HCD enabled
+        const transitionCard = this.transitionCanvas ? (this.transitionCanvas.closest ? this.transitionCanvas.closest('.viewport-card') : this.transitionCanvas.parentElement.parentElement) : null;
+
         if (isHCD && this.transitionCanvas) {
+            if (transitionCard) transitionCard.style.display = 'flex';
             this.transitionCanvas.parentElement.style.display = 'block';
             const tCtx = this.transitionCanvas.getContext('2d');
 
@@ -217,6 +219,7 @@ class Horn2DViewer {
                 }
             });
         } else if (this.transitionCanvas) {
+            if (transitionCard) transitionCard.style.display = 'none';
             this.transitionCanvas.parentElement.style.display = 'none';
         }
     }

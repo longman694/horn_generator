@@ -197,21 +197,40 @@ function calculateTargetMouthRadius(phi, targetShape = 'none', targetWidth = 0.0
 }
 
 /**
- * OS-SE Morphed Horn Profile Generator
+ * Universal Surface Morphing (Ath) Engine
+ * Transforms any circular horn profile points [{x, y}, ...] into a target mouth shape (rectangle, ellipse, circle).
  */
-function generateOSSEMorphedHorn(
-    throatRadius, length, alpha = 45, alpha0 = 0, k = 1.0, s = 0.8, q = 0.998, n = 5,
+function applySurfaceMorphing(
+    basePoints,
     targetShape = 'none', targetWidth = 0.0, targetHeight = 0.0, cornerRadius = 0.0,
     fixedPart = 0.0, morphRate = 3.0, allowShrinkage = false,
-    numPoints = 50, numAngles = 96
+    numAngles = 96
 ) {
-    const rawRes = generateOSSEHorn(throatRadius, length, alpha, alpha0, k, s, q, n, numPoints);
-    const rawPoints = rawRes.points;
+    const rawPoints = basePoints || [];
+    if (rawPoints.length === 0) {
+        return {
+            rawPoints: [],
+            pointsMajor: [],
+            pointsMinor: [],
+            pointsCorner: [],
+            pointsMorphed: [],
+            rMatrix: [],
+            phiAngles: [],
+            targetWidth,
+            targetHeight
+        };
+    }
+
+    const length = rawPoints[rawPoints.length - 1].x - rawPoints[0].x;
     const rawMouthR = rawPoints[rawPoints.length - 1].y;
 
     if (!targetShape || targetShape === 'none') {
         targetWidth = rawMouthR * 2.0;
         targetHeight = rawMouthR * 2.0;
+    } else if (targetShape === 'circle') {
+        const d = parseFloat(targetWidth) || (rawMouthR * 2.0);
+        targetWidth = d;
+        targetHeight = d;
     }
 
     const phiAngles = [];
@@ -239,9 +258,11 @@ function generateOSSEMorphedHorn(
         }
     }
 
-    const zf = parseFloat(fixedPart) * parseFloat(length);
+    const z0 = rawPoints[0].x;
+    const zf = z0 + parseFloat(fixedPart) * Math.max(1e-6, length);
     const gamma = Math.max(1.0, parseFloat(morphRate));
 
+    const numPoints = rawPoints.length;
     const rMatrix = [];
     for (let i = 0; i < numPoints; i++) {
         const zi = rawPoints[i].x;
@@ -251,8 +272,8 @@ function generateOSSEMorphedHorn(
             if (zi < zf) {
                 row.push(rawRi);
             } else {
-                const progress = (zi - zf) / Math.max(1e-6, length - zf);
-                const blend = Math.pow(progress, gamma);
+                const progress = (zi - zf) / Math.max(1e-6, (z0 + length) - zf);
+                const blend = Math.pow(Math.min(1.0, Math.max(0.0, progress)), gamma);
                 row.push(rawRi + blend * (rMAngles[a] - rawMouthR));
             }
         }
@@ -305,10 +326,27 @@ function generateOSSEMorphedHorn(
         pointsMorphed,
         rMatrix,
         phiAngles,
-        calculatedFc: rawRes.calculatedFc,
         targetWidth,
         targetHeight
     };
+}
+
+/**
+ * OS-SE Morphed Horn Profile Generator
+ */
+function generateOSSEMorphedHorn(
+    throatRadius, length, alpha = 45, alpha0 = 0, k = 1.0, s = 0.8, q = 0.998, n = 5,
+    targetShape = 'none', targetWidth = 0.0, targetHeight = 0.0, cornerRadius = 0.0,
+    fixedPart = 0.0, morphRate = 3.0, allowShrinkage = false,
+    numPoints = 50, numAngles = 96
+) {
+    const rawRes = generateOSSEHorn(throatRadius, length, alpha, alpha0, k, s, q, n, numPoints);
+    const morphRes = applySurfaceMorphing(
+        rawRes.points, targetShape, targetWidth, targetHeight, cornerRadius,
+        fixedPart, morphRate, allowShrinkage, numAngles
+    );
+    morphRes.calculatedFc = rawRes.calculatedFc;
+    return morphRes;
 }
 
 /**
@@ -522,9 +560,12 @@ function generateHCDHorn(originPoints, mouthRatio = 1.7, mode = 'linear', acc = 
 // Export for ES modules and browser global
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+        linspace,
+        arange,
         CubicSpline,
         generateOSSEHorn,
         calculateTargetMouthRadius,
+        applySurfaceMorphing,
         generateOSSEMorphedHorn,
         generateTractrixHorn,
         generateSphericalHorn,
@@ -533,9 +574,12 @@ if (typeof module !== 'undefined' && module.exports) {
     };
 } else {
     window.HornMath = {
+        linspace,
+        arange,
         CubicSpline,
         generateOSSEHorn,
         calculateTargetMouthRadius,
+        applySurfaceMorphing,
         generateOSSEMorphedHorn,
         generateTractrixHorn,
         generateSphericalHorn,
