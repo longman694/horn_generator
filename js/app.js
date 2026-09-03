@@ -113,20 +113,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (morphShape !== 'none') {
                 if (morphOptionsDiv) {
                     morphOptionsDiv.style.display = 'block';
-
-                    if (morphShape === 'circle') {
-                        if (groupMorphHeight) groupMorphHeight.style.display = 'none';
-                        if (groupMorphCorner) groupMorphCorner.style.display = 'none';
-                        if (labelMorphWidth) labelMorphWidth.textContent = 'Target Diameter (mm)';
-                    } else if (morphShape === 'ellipse') {
-                        if (groupMorphHeight) groupMorphHeight.style.display = 'block';
-                        if (groupMorphCorner) groupMorphCorner.style.display = 'none';
-                        if (labelMorphWidth) labelMorphWidth.textContent = 'Target Width (mm)';
-                    } else {
-                        // rectangle
-                        if (groupMorphHeight) groupMorphHeight.style.display = 'block';
-                        if (groupMorphCorner) groupMorphCorner.style.display = 'block';
-                        if (labelMorphWidth) labelMorphWidth.textContent = 'Target Width (mm)';
+                    if (groupMorphCorner) {
+                        groupMorphCorner.style.display = (morphShape === 'rectangle') ? 'block' : 'none';
                     }
                 }
             } else {
@@ -231,11 +219,8 @@ document.addEventListener('DOMContentLoaded', () => {
             finalPoints = hcdResult.points;
             chartData = finalPoints;
         } else if (isMorph && basePoints.length > 0) {
-            let targetWidth = parseFloat(morphTargetWidthInput.value) || 300;
-            let targetHeight = parseFloat(morphTargetHeightInput.value) || 200;
-            if (targetShape === 'circle') {
-                targetHeight = targetWidth;
-            }
+            const targetWidth = parseFloat(morphTargetWidthInput.value) || 300;
+            const targetHeight = parseFloat(morphTargetHeightInput.value) || 200;
             const cornerRadius = parseFloat(morphCornerRadiusInput.value) || 20;
             const fixedPart = parseFloat(morphFixedPartInput.value) || 0.0;
             const morphRate = parseFloat(morphRateInput.value) || 3.0;

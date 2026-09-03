@@ -36,7 +36,7 @@ with st.sidebar:
         num_points = st.number_input('Number of points', value=30, min_value=10, max_value=200)
 
         st.subheader("OS-SE Surface Morphing (Ath)")
-        target_shape = st.selectbox('Target Mouth Shape', options=['none', 'rectangle', 'ellipse', 'circle'], index=0)
+        target_shape = st.selectbox('Target Mouth Shape', options=['none', 'rectangle', 'ellipse'], index=0)
         
         target_w = 300.0
         target_h = 200.0
