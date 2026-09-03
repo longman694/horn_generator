@@ -23,10 +23,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- Custom Modules -->
-    <script src="js/horn_math.js?v=20260903_v7"></script>
-    <script src="js/exporters.js?v=20260903_v7"></script>
-    <script src="js/viewer3d.js?v=20260903_v7"></script>
-    <script src="js/viewer2d.js?v=20260903_v7"></script>
+    <script src="js/horn_math.js?v=20260903_v8"></script>
+    <script src="js/exporters.js?v=20260903_v8"></script>
+    <script src="js/viewer3d.js?v=20260903_v8"></script>
+    <script src="js/viewer2d.js?v=20260903_v8"></script>
 </head>
 
 <body>
@@ -249,8 +249,9 @@
             <div class="section-title">3D Solid Modeling Settings</div>
             <div class="form-group">
                 <label class="form-label" for="wall-thickness">Wall Thickness (mm)</label>
-                <input type="number" id="wall-thickness" class="form-control" value="2.0" min="0.5" max="20.0"
+                <input type="number" id="wall-thickness" class="form-control" value="2.0" min="0" max="20.0"
                     step="0.5">
+                <div class="form-hint" style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">Set to 0 to generate only a face of the horn.</div>
             </div>
 
         </aside>
@@ -377,7 +378,7 @@
     </footer>
 
     <!-- Main Coordinator App Script -->
-    <script src="js/app.js?v=20260903_v7"></script>
+    <script src="js/app.js?v=20260903_v8"></script>
 </body>
 
 </html>

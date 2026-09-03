@@ -157,6 +157,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function getWallThickness() {
+        const val = parseFloat(wallThicknessInput.value);
+        return isNaN(val) ? 2.0 : Math.max(0, val);
+    }
+
     // --- Main Update Function ---
     function updateHorn() {
         updateFormVisibility();
@@ -164,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const type = hornTypeSelect.value;
         const throatR = parseFloat(throatRInput.value) || 15.0;
         const cutoffF = parseFloat(cutoffFInput.value) || 1000.0;
-        const wallThickness = parseFloat(wallThicknessInput.value) || 2.0;
+        const wallThickness = getWallThickness();
 
         let baseResult = { points: [] };
 
@@ -380,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnExportSTL.addEventListener('click', () => {
         if (currentPoints.length === 0) return;
-        const wallThickness = parseFloat(wallThicknessInput.value) || 2.0;
+        const wallThickness = getWallThickness();
         const stlBuffer = HornExporters.generateSTL(currentPoints, currentIsHCD, wallThickness);
         const suffix = currentIsHCD ? '_HCD' : (currentIsMorph ? `_Morphed_${morphTargetShapeSelect.value}` : '');
         const fileName = `${hornTypeSelect.value}${suffix}_Model.stl`;
@@ -389,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnExportOBJ.addEventListener('click', () => {
         if (currentPoints.length === 0) return;
-        const wallThickness = parseFloat(wallThicknessInput.value) || 2.0;
+        const wallThickness = getWallThickness();
         const objText = HornExporters.generateOBJ(currentPoints, currentIsHCD, wallThickness);
         const suffix = currentIsHCD ? '_HCD' : (currentIsMorph ? `_Morphed_${morphTargetShapeSelect.value}` : '');
         const fileName = `${hornTypeSelect.value}${suffix}_Model.obj`;
@@ -398,7 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnExportSCAD.addEventListener('click', () => {
         if (currentPoints.length === 0) return;
-        const wallThickness = parseFloat(wallThicknessInput.value) || 2.0;
+        const wallThickness = getWallThickness();
         const scadText = HornExporters.generateOpenSCAD(currentPoints, currentIsHCD, wallThickness);
         const suffix = currentIsHCD ? '_HCD' : (currentIsMorph ? `_Morphed_${morphTargetShapeSelect.value}` : '');
         const fileName = `${hornTypeSelect.value}${suffix}_Script.scad`;

@@ -140,14 +140,23 @@ function generateOpenSCAD(points, isHCD = false, wallThickness = 2.0) {
         }
         scad += `];\n\n`;
 
-        scad += `module horn_solid() {\n`;
-        scad += `    rotate_extrude()\n`;
-        scad += `    polygon(points = concat(\n`;
-        scad += `        profile_points,\n`;
-        scad += `        [for (i = [len(profile_points)-1 : -1 : 0]) [profile_points[i][0], profile_points[i][1] + wall_thickness]]\n`;
-        scad += `    ));\n`;
-        scad += `}\n\n`;
-        scad += `horn_solid();\n`;
+        if (wallThickness <= 0) {
+            scad += `module horn_surface() {\n`;
+            scad += `    // Single face profile (zero thickness surface)\n`;
+            scad += `    rotate_extrude()\n`;
+            scad += `    polygon(points = profile_points);\n`;
+            scad += `}\n\n`;
+            scad += `horn_surface();\n`;
+        } else {
+            scad += `module horn_solid() {\n`;
+            scad += `    rotate_extrude()\n`;
+            scad += `    polygon(points = concat(\n`;
+            scad += `        profile_points,\n`;
+            scad += `        [for (i = [len(profile_points)-1 : -1 : 0]) [profile_points[i][0], profile_points[i][1] + wall_thickness]]\n`;
+            scad += `    ));\n`;
+            scad += `}\n\n`;
+            scad += `horn_solid();\n`;
+        }
     } else {
         scad += `// HCD Elliptical Loft Points [x, a, b]\nhcd_points = [\n`;
         for (let i = 0; i < points.length; i++) {
@@ -207,7 +216,8 @@ function getRadiusAtAngle(p, theta, isHCD) {
 }
 
 /**
- * Helper to build 3D mesh vertices and indices for solid Horn with wall thickness
+ * Helper to build 3D mesh vertices and indices for solid Horn with wall thickness,
+ * or single face horn surface if wallThickness <= 0.
  */
 function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRadial = 96) {
     const vertices = [];
@@ -215,15 +225,15 @@ function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRa
 
     const numPoints = points.length;
     const numRot = numRadial;
+    const isSingleFace = (wallThickness <= 0);
 
     // Outer and Inner ring vertices
     // Index layout:
     // Inner surface: ring i (0 to numPoints-1), angle j (0 to numRot-1) -> index: i * numRot + j
-    // Outer surface: ring i (0 to numPoints-1), angle j (0 to numRot-1) -> index: numPoints * numRot + i * numRot + j
-
+    // Outer surface (if solid): index: numPoints * numRot + i * numRot + j
     const outerOffset = numPoints * numRot;
 
-    // Generate Inner Surface Vertices
+    // Generate Surface Vertices (Inner/Primary profile)
     for (let i = 0; i < numPoints; i++) {
         const p = points[i];
 
@@ -242,23 +252,25 @@ function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRa
         }
     }
 
-    // Generate Outer Surface Vertices (offset by wallThickness)
-    for (let i = 0; i < numPoints; i++) {
-        const p = points[i];
+    if (!isSingleFace) {
+        // Generate Outer Surface Vertices (offset by wallThickness)
+        for (let i = 0; i < numPoints; i++) {
+            const p = points[i];
 
-        for (let j = 0; j < numRot; j++) {
-            const theta = (j * 2 * Math.PI) / numRot;
-            const rInner = getRadiusAtAngle(p, theta, isHCD);
-            const rOuter = rInner + wallThickness;
+            for (let j = 0; j < numRot; j++) {
+                const theta = (j * 2 * Math.PI) / numRot;
+                const rInner = getRadiusAtAngle(p, theta, isHCD);
+                const rOuter = rInner + wallThickness;
 
-            const x = p.x;
-            const y = rOuter * Math.sin(theta);
-            const z = rOuter * Math.cos(theta);
-            vertices.push(x, y, z);
+                const x = p.x;
+                const y = rOuter * Math.sin(theta);
+                const z = rOuter * Math.cos(theta);
+                vertices.push(x, y, z);
+            }
         }
     }
 
-    // Generate Quads/Triangles for Inner Tube
+    // Generate Quads/Triangles for Inner Tube / Surface
     for (let i = 0; i < numPoints - 1; i++) {
         for (let j = 0; j < numRot; j++) {
             const nextJ = (j + 1) % numRot;
@@ -267,50 +279,58 @@ function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRa
             const idx3 = (i + 1) * numRot + nextJ;
             const idx4 = (i + 1) * numRot + j;
 
-            // Inner surface faces (facing inwards)
-            triangles.push([idx1, idx3, idx2]);
-            triangles.push([idx1, idx4, idx3]);
+            if (isSingleFace) {
+                // Outward facing normals for single surface
+                triangles.push([idx1, idx2, idx3]);
+                triangles.push([idx1, idx3, idx4]);
+            } else {
+                // Inner surface faces (facing inwards towards bore)
+                triangles.push([idx1, idx3, idx2]);
+                triangles.push([idx1, idx4, idx3]);
+            }
         }
     }
 
-    // Generate Quads/Triangles for Outer Tube
-    for (let i = 0; i < numPoints - 1; i++) {
+    if (!isSingleFace) {
+        // Generate Quads/Triangles for Outer Tube
+        for (let i = 0; i < numPoints - 1; i++) {
+            for (let j = 0; j < numRot; j++) {
+                const nextJ = (j + 1) % numRot;
+                const idx1 = outerOffset + i * numRot + j;
+                const idx2 = outerOffset + i * numRot + nextJ;
+                const idx3 = outerOffset + (i + 1) * numRot + nextJ;
+                const idx4 = outerOffset + (i + 1) * numRot + j;
+
+                // Outer surface faces (facing outwards)
+                triangles.push([idx1, idx2, idx3]);
+                triangles.push([idx1, idx3, idx4]);
+            }
+        }
+
+        // Throat Rim Cap (i = 0)
         for (let j = 0; j < numRot; j++) {
             const nextJ = (j + 1) % numRot;
-            const idx1 = outerOffset + i * numRot + j;
-            const idx2 = outerOffset + i * numRot + nextJ;
-            const idx3 = outerOffset + (i + 1) * numRot + nextJ;
-            const idx4 = outerOffset + (i + 1) * numRot + j;
+            const in1 = 0 * numRot + j;
+            const in2 = 0 * numRot + nextJ;
+            const out1 = outerOffset + 0 * numRot + j;
+            const out2 = outerOffset + 0 * numRot + nextJ;
 
-            // Outer surface faces (facing outwards)
-            triangles.push([idx1, idx2, idx3]);
-            triangles.push([idx1, idx3, idx4]);
+            triangles.push([in1, out2, in2]);
+            triangles.push([in1, out1, out2]);
         }
-    }
 
-    // Throat Rim Cap (i = 0)
-    for (let j = 0; j < numRot; j++) {
-        const nextJ = (j + 1) % numRot;
-        const in1 = 0 * numRot + j;
-        const in2 = 0 * numRot + nextJ;
-        const out1 = outerOffset + 0 * numRot + j;
-        const out2 = outerOffset + 0 * numRot + nextJ;
+        // Mouth Rim Cap (i = numPoints - 1)
+        const lastI = numPoints - 1;
+        for (let j = 0; j < numRot; j++) {
+            const nextJ = (j + 1) % numRot;
+            const in1 = lastI * numRot + j;
+            const in2 = lastI * numRot + nextJ;
+            const out1 = outerOffset + lastI * numRot + j;
+            const out2 = outerOffset + lastI * numRot + nextJ;
 
-        triangles.push([in1, out2, in2]);
-        triangles.push([in1, out1, out2]);
-    }
-
-    // Mouth Rim Cap (i = numPoints - 1)
-    const lastI = numPoints - 1;
-    for (let j = 0; j < numRot; j++) {
-        const nextJ = (j + 1) % numRot;
-        const in1 = lastI * numRot + j;
-        const in2 = lastI * numRot + nextJ;
-        const out1 = outerOffset + lastI * numRot + j;
-        const out2 = outerOffset + lastI * numRot + nextJ;
-
-        triangles.push([in1, in2, out2]);
-        triangles.push([in1, out2, out1]);
+            triangles.push([in1, in2, out2]);
+            triangles.push([in1, out2, out1]);
+        }
     }
 
     return { vertices, triangles };
