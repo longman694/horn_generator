@@ -420,6 +420,249 @@ function generateOBJ(points, isHCD = false, wallThickness = 2.0) {
     return obj;
 }
 
+/**
+ * Generate 3D STL for circular throat driving diaphragm cap at x = 0 (Binary Format)
+ * Normal vector points in +X (down the horn into the radiation field).
+ * Rim vertices match buildHornMeshGeometry(points, ..., 0, numRadial) at ring 0.
+ */
+function generateThroatCapSTL(throatRadius = 15.0, numRadial = 96) {
+    const numTri = numRadial;
+    const bufferLength = 80 + 4 + numTri * 50;
+    const buffer = new ArrayBuffer(bufferLength);
+    const view = new DataView(buffer);
+
+    // 80-byte header
+    const headerStr = "Horn Generator Throat Diaphragm STL";
+    for (let i = 0; i < 80; i++) {
+        view.setUint8(i, i < headerStr.length ? headerStr.charCodeAt(i) : 0);
+    }
+
+    // Number of triangles
+    view.setUint32(80, numTri, true);
+
+    let offset = 84;
+    const center = [0.0, 0.0, 0.0];
+
+    for (let j = 0; j < numRadial; j++) {
+        const theta1 = (j * 2 * Math.PI) / numRadial;
+        const theta2 = ((j + 1) * 2 * Math.PI) / numRadial;
+
+        // Vertices matching horn bore at x = 0
+        // Y = r * sin(theta), Z = r * cos(theta)
+        const p1 = [0.0, throatRadius * Math.sin(theta1), throatRadius * Math.cos(theta1)];
+        const p2 = [0.0, throatRadius * Math.sin(theta2), throatRadius * Math.cos(theta2)];
+
+        // Normal points in +X: cross product (p2 - center) x (p1 - center)
+        // has positive X component: r^2 * sin(theta2 - theta1) > 0
+        const nx = 1.0, ny = 0.0, nz = 0.0;
+
+        view.setFloat32(offset, nx, true);
+        view.setFloat32(offset + 4, ny, true);
+        view.setFloat32(offset + 8, nz, true);
+        offset += 12;
+
+        // Center
+        view.setFloat32(offset, center[0], true);
+        view.setFloat32(offset + 4, center[1], true);
+        view.setFloat32(offset + 8, center[2], true);
+        offset += 12;
+
+        // p2 (theta2)
+        view.setFloat32(offset, p2[0], true);
+        view.setFloat32(offset + 4, p2[1], true);
+        view.setFloat32(offset + 8, p2[2], true);
+        offset += 12;
+
+        // p1 (theta1)
+        view.setFloat32(offset, p1[0], true);
+        view.setFloat32(offset + 4, p1[1], true);
+        view.setFloat32(offset + 8, p1[2], true);
+        offset += 12;
+
+        view.setUint16(offset, 0, true);
+        offset += 2;
+    }
+
+    return buffer;
+}
+
+/**
+ * Generate ABEC / AKABAK 3 BEM Project Scripts
+ */
+function generateABECProjectScripts(hornParams = {}, hornName = "Horn") {
+    const hornType = hornParams.hornType || "OS-SE";
+    const throatR = hornParams.throatR !== undefined ? hornParams.throatR : 15.0;
+    const length = hornParams.length !== undefined ? hornParams.length : 50.0;
+    const cutoffF = hornParams.cutoffF !== undefined ? hornParams.cutoffF : 1000.0;
+    const f1 = hornParams.f1 || Math.max(100, Math.round(cutoffF * 0.5));
+    const f2 = hornParams.f2 || 20000;
+    const numFreq = hornParams.numFreq || 48;
+    const distance = hornParams.distance || 1.0;
+
+    const projectAbec = `// Master ABEC 3 Project Definition File
+// Compatible with ABEC 3 and AKABAK 3 (Tools -> Import ABEC Project...)
+
+[Project]
+Scriptname_InfoFile=README.txt
+[Solving]
+Scriptname_Solving=solving.txt
+[DirectSound]
+Scriptname_DirectSound=
+[LEScript]
+Scriptname_LEScript=
+[Observation]
+C0=observation.txt
+[MeshFiles]
+C0=Horn.stl,M1
+C1=Throat.stl,M2
+`;
+
+    const solvingTxt = `// ABEC / AKABAK 3 Solving Script
+// Boundary Element Method (BEM) Simulation in Free Air (4*pi steradians)
+
+Control_Solver
+  f1=${f1}; f2=${f2}; NumFrequencies=${numFreq}
+  Abscissa=log; Dim=3D; MeshFrequency=${f2}
+
+MeshFile_Properties
+  MeshFileAlias="M1"; Scale=1mm
+
+MeshFile_Properties
+  MeshFileAlias="M2"; Scale=1mm
+
+SubDomain_Properties
+  SubDomain=1; ElType=Exterior
+
+// Horn Wall Boundary (Rigid sound-hard boundary: vn = 0)
+Elements "Horn_Wall"
+  Subdomain=1; MeshFileAlias="M1"
+  101 Mesh Include ALL
+
+// Throat Driving Diaphragm (Acoustic Velocity excitation)
+Elements "Throat_Diaphragm"
+  Subdomain=1; MeshFileAlias="M2"
+  201 Mesh Include ALL
+
+Driving "Throat_Driver"
+  RefElements="Throat_Diaphragm"; DrvGroup=1001;
+`;
+
+    const observationTxt = `// ABEC / AKABAK 3 Observation Script
+// Far-field Directivity & Acoustic Radiation Impedance
+
+Driving_Values
+  DrvType=Velocity; Value=1.0
+  1  DrvGroup=1001  Weight=1.0  Delay=0.0
+
+// Throat Radiation Impedance (Real & Imaginary acoustic loading)
+Radiation_Impedance
+  GraphHeader="RadImp"
+  BodeType=Complex
+  RadImpType=Normalized
+  Range_min=0; Range_max=2
+  1  1001  1001  ID=1001
+
+// Horizontal Directivity Sonogram (-180 to +180 deg in horizontal X-Z plane)
+BE_Spectrum
+  PlotType=Polar
+  GraphHeader="Directivity_Hor"
+  BodeType=LeveldB
+  Range_min=-45; Range_max=5
+  PolarRange=-180,180,145
+  BasePlane=xz
+  Farfield=true
+  Distance=${distance}m
+  1  Inclination=0  ID=101
+
+// Vertical Directivity Sonogram (-180 to +180 deg in vertical X-Y plane)
+BE_Spectrum
+  PlotType=Polar
+  GraphHeader="Directivity_Ver"
+  BodeType=LeveldB
+  Range_min=-45; Range_max=5
+  PolarRange=-180,180,145
+  BasePlane=xy
+  Farfield=true
+  Distance=${distance}m
+  1  Inclination=0  ID=102
+`;
+
+    const readmeTxt = `========================================================================
+AKABAK 3 / ABEC - Horn BEM Directivity Simulation Package
+========================================================================
+Generated by: Horn Profile Generator (Pure HTML & JavaScript)
+Horn Type:       ${hornType}
+Throat Radius:   ${throatR} mm (Throat Diameter: ${(throatR * 2).toFixed(2)} mm)
+Axial Length:    ${length} mm
+Cutoff Freq:     ${cutoffF} Hz
+Driving Source:  Ideal Plane-Wave Diaphragm (Velocity = 1.0 m/s)
+Acoustic Domain: Free Space (4*pi steradians BEM)
+
+Simulation Files:
+-----------------
+- Project.abec     : Master ABEC project definition
+- solving.txt      : BEM physics, mesh assignments & boundary conditions
+- observation.txt  : Far-field polar directivity arcs (Hor/Ver) & RadImp
+- Horn.stl         : Horn surface mesh (single-face sound-hard boundary)
+- Throat.stl       : Planar driving diaphragm cap at x = 0
+- README.txt       : Quick-start execution guide
+
+Instructions to Run in AKABAK 3:
+---------------------------------
+1. Launch AKABAK (e.g., C:\\Program Files\\RDTeam\\AKABAK\\AKABAK.exe).
+2. Select menu: Tools -> Import ABEC Project...
+3. Browse and select "Project.abec" from this extracted folder.
+4. Click "Open", then click "Start Import".
+5. Once verified, click "Apply" to build the AKABAK 3 simulation model.
+6. Press F5 (or click Calculate) to run the BEM frequency sweep.
+7. In VACS, inspect the generated graphs:
+   * "Directivity_Hor" : Horizontal Directivity Isobar Sonogram (-180° to +180°)
+   * "Directivity_Ver" : Vertical Directivity Isobar Sonogram (-180° to +180°)
+   * "RadImp"          : Throat Radiation Resistance & Reactance
+========================================================================
+`;
+
+    return { projectAbec, solvingTxt, observationTxt, readmeTxt };
+}
+
+/**
+ * Client-Side ZIP Export for AKABAK 3 / ABEC Simulation Package
+ */
+function exportAKABAKZip(points, isHCD = false, isMorph = false, hornParams = {}, hornName = "Horn") {
+    if (typeof JSZip === 'undefined') {
+        alert("JSZip library is required to bundle the simulation package. Please check network connection.");
+        return;
+    }
+
+    // 1. Generate single-face Horn STL (wallThickness = 0)
+    const hornStlBuffer = generateSTL(points, isHCD, 0.0);
+
+    // 2. Generate flat circular Throat driving diaphragm cap at x = 0
+    const throatR = hornParams.throatR !== undefined ? hornParams.throatR : (points[0] ? points[0].y : 15.0);
+    const throatStlBuffer = generateThroatCapSTL(throatR, 96);
+
+    // 3. Generate simulation scripts
+    const scripts = generateABECProjectScripts(hornParams, hornName);
+
+    // 4. Bundle into ZIP
+    const zip = new JSZip();
+    zip.file("Horn.stl", hornStlBuffer);
+    zip.file("Throat.stl", throatStlBuffer);
+    zip.file("Project.abec", scripts.projectAbec);
+    zip.file("solving.txt", scripts.solvingTxt);
+    zip.file("observation.txt", scripts.observationTxt);
+    zip.file("README.txt", scripts.readmeTxt);
+
+    const zipFileName = `${hornName}_AKABAK_Simulation.zip`;
+
+    zip.generateAsync({ type: "blob" }).then(function(blob) {
+        downloadFile(blob, zipFileName, "application/zip");
+    }).catch(function(err) {
+        console.error("Failed to generate AKABAK ZIP archive:", err);
+        alert("Failed to create ZIP file: " + err.message);
+    });
+}
+
 // Export for browser global and modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -429,7 +672,10 @@ if (typeof module !== 'undefined' && module.exports) {
         generateOpenSCAD,
         generateSTL,
         generateOBJ,
-        buildHornMeshGeometry
+        buildHornMeshGeometry,
+        generateThroatCapSTL,
+        generateABECProjectScripts,
+        exportAKABAKZip
     };
 } else {
     window.HornExporters = {
@@ -439,6 +685,9 @@ if (typeof module !== 'undefined' && module.exports) {
         generateOpenSCAD,
         generateSTL,
         generateOBJ,
-        buildHornMeshGeometry
+        buildHornMeshGeometry,
+        generateThroatCapSTL,
+        generateABECProjectScripts,
+        exportAKABAKZip
     };
 }

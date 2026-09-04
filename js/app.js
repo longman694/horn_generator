@@ -72,6 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnExportOBJ = document.getElementById('btn-export-obj');
     const btnExportSCAD = document.getElementById('btn-export-scad');
     const btnExportCSV = document.getElementById('btn-export-csv');
+    const btnExportAkabak = document.getElementById('btn-export-akabak');
 
     // 3D Viewport Controls Buttons
     const btnToggleWireframe = document.getElementById('btn-toggle-wireframe');
@@ -417,6 +418,35 @@ document.addEventListener('DOMContentLoaded', () => {
         const fileName = `${hornTypeSelect.value}${suffix}_Data.csv`;
         HornExporters.downloadFile(csvText, fileName, 'text/csv');
     });
+
+    if (btnExportAkabak) {
+        btnExportAkabak.addEventListener('click', () => {
+            if (currentPoints.length === 0) return;
+            const type = hornTypeSelect.value;
+            const throatR = parseFloat(throatRInput.value) || 15.0;
+            const length = type === 'OS-SE'
+                ? (parseFloat(lengthInput.value) || 50)
+                : (currentPoints[currentPoints.length - 1] ? currentPoints[currentPoints.length - 1].x : 50);
+            const cutoffF = (type === 'OS-SE' && currentResult && currentResult.calculatedFc)
+                ? currentResult.calculatedFc
+                : (parseFloat(cutoffFInput.value) || 1000.0);
+
+            const hornParams = {
+                hornType: type,
+                throatR: throatR,
+                length: length,
+                cutoffF: cutoffF,
+                f1: Math.max(100, Math.round(cutoffF * 0.5)),
+                f2: 20000,
+                numFreq: 48,
+                distance: 1.0
+            };
+
+            const suffix = currentIsHCD ? '_HCD' : (currentIsMorph ? `_Morphed_${morphTargetShapeSelect.value}` : '');
+            const hornName = `${type}${suffix}`;
+            HornExporters.exportAKABAKZip(currentPoints, currentIsHCD, currentIsMorph, hornParams, hornName);
+        });
+    }
 
     // Initial Trigger
     updateHorn();
