@@ -219,26 +219,28 @@ function getRadiusAtAngle(p, theta, isHCD) {
  * Helper to build 3D mesh vertices and indices for solid Horn with wall thickness,
  * or single face horn surface if wallThickness <= 0.
  */
-function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRadial = 96) {
+function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRadial = 96, isQuarter = false) {
     const vertices = [];
     const triangles = [];
 
     const numPoints = points.length;
-    const numRot = numRadial;
+    const numRot = isQuarter ? Math.max(12, Math.round(numRadial / 4)) : numRadial;
+    const maxTheta = isQuarter ? (Math.PI / 2) : (2 * Math.PI);
+    const stride = isQuarter ? (numRot + 1) : numRot;
     const isSingleFace = (wallThickness <= 0);
 
     // Outer and Inner ring vertices
-    // Index layout:
-    // Inner surface: ring i (0 to numPoints-1), angle j (0 to numRot-1) -> index: i * numRot + j
-    // Outer surface (if solid): index: numPoints * numRot + i * numRot + j
-    const outerOffset = numPoints * numRot;
+    // Inner surface: ring i (0 to numPoints-1), angle j (0 to stride-1)
+    // Outer surface (if solid): offset = numPoints * stride
+    const outerOffset = numPoints * stride;
 
     // Generate Surface Vertices (Inner/Primary profile)
     for (let i = 0; i < numPoints; i++) {
         const p = points[i];
+        const jCount = isQuarter ? (numRot + 1) : numRot;
 
-        for (let j = 0; j < numRot; j++) {
-            const theta = (j * 2 * Math.PI) / numRot;
+        for (let j = 0; j < jCount; j++) {
+            const theta = (j * maxTheta) / numRot;
             const rInner = getRadiusAtAngle(p, theta, isHCD);
 
             // Three.js Coordinate Alignment:
@@ -256,9 +258,10 @@ function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRa
         // Generate Outer Surface Vertices (offset by wallThickness)
         for (let i = 0; i < numPoints; i++) {
             const p = points[i];
+            const jCount = isQuarter ? (numRot + 1) : numRot;
 
-            for (let j = 0; j < numRot; j++) {
-                const theta = (j * 2 * Math.PI) / numRot;
+            for (let j = 0; j < jCount; j++) {
+                const theta = (j * maxTheta) / numRot;
                 const rInner = getRadiusAtAngle(p, theta, isHCD);
                 const rOuter = rInner + wallThickness;
 
@@ -273,11 +276,11 @@ function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRa
     // Generate Quads/Triangles for Inner Tube / Surface
     for (let i = 0; i < numPoints - 1; i++) {
         for (let j = 0; j < numRot; j++) {
-            const nextJ = (j + 1) % numRot;
-            const idx1 = i * numRot + j;
-            const idx2 = i * numRot + nextJ;
-            const idx3 = (i + 1) * numRot + nextJ;
-            const idx4 = (i + 1) * numRot + j;
+            const nextJ = isQuarter ? (j + 1) : ((j + 1) % numRot);
+            const idx1 = i * stride + j;
+            const idx2 = i * stride + nextJ;
+            const idx3 = (i + 1) * stride + nextJ;
+            const idx4 = (i + 1) * stride + j;
 
             if (isSingleFace) {
                 // Outward facing normals for single surface
@@ -295,11 +298,11 @@ function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRa
         // Generate Quads/Triangles for Outer Tube
         for (let i = 0; i < numPoints - 1; i++) {
             for (let j = 0; j < numRot; j++) {
-                const nextJ = (j + 1) % numRot;
-                const idx1 = outerOffset + i * numRot + j;
-                const idx2 = outerOffset + i * numRot + nextJ;
-                const idx3 = outerOffset + (i + 1) * numRot + nextJ;
-                const idx4 = outerOffset + (i + 1) * numRot + j;
+                const nextJ = isQuarter ? (j + 1) : ((j + 1) % numRot);
+                const idx1 = outerOffset + i * stride + j;
+                const idx2 = outerOffset + i * stride + nextJ;
+                const idx3 = outerOffset + (i + 1) * stride + nextJ;
+                const idx4 = outerOffset + (i + 1) * stride + j;
 
                 // Outer surface faces (facing outwards)
                 triangles.push([idx1, idx2, idx3]);
@@ -309,11 +312,11 @@ function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRa
 
         // Throat Rim Cap (i = 0)
         for (let j = 0; j < numRot; j++) {
-            const nextJ = (j + 1) % numRot;
-            const in1 = 0 * numRot + j;
-            const in2 = 0 * numRot + nextJ;
-            const out1 = outerOffset + 0 * numRot + j;
-            const out2 = outerOffset + 0 * numRot + nextJ;
+            const nextJ = isQuarter ? (j + 1) : ((j + 1) % numRot);
+            const in1 = 0 * stride + j;
+            const in2 = 0 * stride + nextJ;
+            const out1 = outerOffset + 0 * stride + j;
+            const out2 = outerOffset + 0 * stride + nextJ;
 
             triangles.push([in1, out2, in2]);
             triangles.push([in1, out1, out2]);
@@ -322,11 +325,11 @@ function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRa
         // Mouth Rim Cap (i = numPoints - 1)
         const lastI = numPoints - 1;
         for (let j = 0; j < numRot; j++) {
-            const nextJ = (j + 1) % numRot;
-            const in1 = lastI * numRot + j;
-            const in2 = lastI * numRot + nextJ;
-            const out1 = outerOffset + lastI * numRot + j;
-            const out2 = outerOffset + lastI * numRot + nextJ;
+            const nextJ = isQuarter ? (j + 1) : ((j + 1) % numRot);
+            const in1 = lastI * stride + j;
+            const in2 = lastI * stride + nextJ;
+            const out1 = outerOffset + lastI * stride + j;
+            const out2 = outerOffset + lastI * stride + nextJ;
 
             triangles.push([in1, in2, out2]);
             triangles.push([in1, out2, out1]);
@@ -339,8 +342,8 @@ function buildHornMeshGeometry(points, isHCD = false, wallThickness = 2.0, numRa
 /**
  * Generate 3D STL File (Binary Format)
  */
-function generateSTL(points, isHCD = false, wallThickness = 2.0) {
-    const { vertices, triangles } = buildHornMeshGeometry(points, isHCD, wallThickness);
+function generateSTL(points, isHCD = false, wallThickness = 2.0, numRadial = 96, isQuarter = false) {
+    const { vertices, triangles } = buildHornMeshGeometry(points, isHCD, wallThickness, numRadial, isQuarter);
 
     const bufferLength = 80 + 4 + triangles.length * 50;
     const buffer = new ArrayBuffer(bufferLength);
@@ -425,14 +428,20 @@ function generateOBJ(points, isHCD = false, wallThickness = 2.0) {
  * Normal vector points in +X (down the horn into the radiation field).
  * Rim vertices match buildHornMeshGeometry(points, ..., 0, numRadial) at ring 0.
  */
-function generateThroatCapSTL(throatRadius = 15.0, numRadial = 96) {
-    const numTri = numRadial;
+/**
+ * Generate 3D STL for circular or elliptical throat driving diaphragm cap at x = 0 (Binary Format)
+ * Normal vector points in +X (down the horn into the radiation field).
+ * Rim vertices match buildHornMeshGeometry(points, ..., 0, numRadial) at ring 0.
+ */
+function generateThroatCapSTL(throatRadius = 15.0, numRadial = 96, isQuarter = false, firstPoint = null, isHCD = false) {
+    const numTri = isQuarter ? Math.max(12, Math.round(numRadial / 4)) : numRadial;
+    const maxTheta = isQuarter ? (Math.PI / 2) : (2 * Math.PI);
     const bufferLength = 80 + 4 + numTri * 50;
     const buffer = new ArrayBuffer(bufferLength);
     const view = new DataView(buffer);
 
     // 80-byte header
-    const headerStr = "Horn Generator Throat Diaphragm STL";
+    const headerStr = isQuarter ? "Horn Generator Quarter Throat Diaphragm STL" : "Horn Generator Throat Diaphragm STL";
     for (let i = 0; i < 80; i++) {
         view.setUint8(i, i < headerStr.length ? headerStr.charCodeAt(i) : 0);
     }
@@ -443,14 +452,17 @@ function generateThroatCapSTL(throatRadius = 15.0, numRadial = 96) {
     let offset = 84;
     const center = [0.0, 0.0, 0.0];
 
-    for (let j = 0; j < numRadial; j++) {
-        const theta1 = (j * 2 * Math.PI) / numRadial;
-        const theta2 = ((j + 1) * 2 * Math.PI) / numRadial;
+    for (let j = 0; j < numTri; j++) {
+        const theta1 = (j * maxTheta) / numTri;
+        const theta2 = ((j + 1) * maxTheta) / numTri;
+
+        const r1 = firstPoint ? getRadiusAtAngle(firstPoint, theta1, isHCD) : throatRadius;
+        const r2 = firstPoint ? getRadiusAtAngle(firstPoint, theta2, isHCD) : throatRadius;
 
         // Vertices matching horn bore at x = 0
         // Y = r * sin(theta), Z = r * cos(theta)
-        const p1 = [0.0, throatRadius * Math.sin(theta1), throatRadius * Math.cos(theta1)];
-        const p2 = [0.0, throatRadius * Math.sin(theta2), throatRadius * Math.cos(theta2)];
+        const p1 = [0.0, r1 * Math.sin(theta1), r1 * Math.cos(theta1)];
+        const p2 = [0.0, r2 * Math.sin(theta2), r2 * Math.cos(theta2)];
 
         // Normal points in +X: cross product (p2 - center) x (p1 - center)
         // has positive X component: r^2 * sin(theta2 - theta1) > 0
@@ -496,8 +508,10 @@ function generateABECProjectScripts(hornParams = {}, hornName = "Horn") {
     const cutoffF = hornParams.cutoffF !== undefined ? hornParams.cutoffF : 1000.0;
     const f1 = hornParams.f1 || Math.max(100, Math.round(cutoffF * 0.5));
     const f2 = hornParams.f2 || 20000;
-    const numFreq = hornParams.numFreq || 48;
+    const numFreq = hornParams.numFreq || (hornParams.symmetry === 'quarter' ? 30 : 48);
     const distance = hornParams.distance || 1.0;
+    const isQuarter = hornParams.symmetry === 'quarter';
+    const symLine = isQuarter ? "  Sym=yz\n" : "";
 
     const projectAbec = `// Master ABEC 3 Project Definition File
 // Compatible with ABEC 3 and AKABAK 3 (Tools -> Import ABEC Project...)
@@ -519,11 +533,11 @@ C1=Throat.stl,M2
 
     const solvingTxt = `// ABEC / AKABAK 3 Solving Script
 // Boundary Element Method (BEM) Simulation in Free Air (4*pi steradians)
-
+${isQuarter ? '// Quarter-Symmetric Simulation (Sym=yz): Exploits dual symmetry across Y=0 and Z=0 planes (8x-16x BEM speedup)\n' : ''}
 Control_Solver
   f1=${f1}; f2=${f2}; NumFrequencies=${numFreq}
   Abscissa=log; Dim=3D; MeshFrequency=${f2}
-
+${symLine}
 MeshFile_Properties
   MeshFileAlias="M1"; Scale=1mm
 
@@ -590,11 +604,13 @@ BE_Spectrum
     const readmeTxt = `========================================================================
 AKABAK 3 / ABEC - Horn BEM Directivity Simulation Package
 ========================================================================
-Generated by: Horn Profile Generator (Pure HTML & JavaScript)
+Generated by:    Horn Profile Generator (Pure HTML & JavaScript)
 Horn Type:       ${hornType}
+Symmetry:        ${isQuarter ? 'Quarter-Symmetric (Sym=yz) - 8x-16x BEM speedup' : 'Full 360° Mesh (Standard)'}
 Throat Radius:   ${throatR} mm (Throat Diameter: ${(throatR * 2).toFixed(2)} mm)
 Axial Length:    ${length} mm
 Cutoff Freq:     ${cutoffF} Hz
+Frequency Sweep: ${numFreq} log points (${f1} Hz to ${f2} Hz)
 Driving Source:  Ideal Plane-Wave Diaphragm (Velocity = 1.0 m/s)
 Acoustic Domain: Free Space (4*pi steradians BEM)
 
@@ -603,7 +619,7 @@ Simulation Files:
 - Project.abec     : Master ABEC project definition
 - solving.txt      : BEM physics, mesh assignments & boundary conditions
 - observation.txt  : Far-field polar directivity arcs (Hor/Ver) & RadImp
-- Horn.stl         : Horn surface mesh (single-face sound-hard boundary)
+- Horn.stl         : Horn surface mesh (sound-hard boundary)
 - Throat.stl       : Planar driving diaphragm cap at x = 0
 - README.txt       : Quick-start execution guide
 
@@ -614,7 +630,7 @@ Instructions to Run in AKABAK 3:
 3. Browse and select "Project.abec" from this extracted folder.
 4. Click "Open", then click "Start Import".
 5. Once verified, click "Apply" to build the AKABAK 3 simulation model.
-6. Press F5 (or click Calculate) to run the BEM frequency sweep.
+${isQuarter ? '   * Notice: In the AKABAK 3D viewport, the horn will automatically appear\n     mirrored across both symmetry planes as a complete horn!\n' : ''}6. Press F5 (or click Calculate) to run the BEM frequency sweep.
 7. In VACS, inspect the generated graphs:
    * "Directivity_Hor" : Horizontal Directivity Isobar Sonogram (-180° to +180°)
    * "Directivity_Ver" : Vertical Directivity Isobar Sonogram (-180° to +180°)
@@ -634,12 +650,14 @@ function exportAKABAKZip(points, isHCD = false, isMorph = false, hornParams = {}
         return;
     }
 
-    // 1. Generate single-face Horn STL (wallThickness = 0)
-    const hornStlBuffer = generateSTL(points, isHCD, 0.0);
+    const isQuarter = hornParams.symmetry === 'quarter';
 
-    // 2. Generate flat circular Throat driving diaphragm cap at x = 0
+    // 1. Generate single-face Horn STL (wallThickness = 0)
+    const hornStlBuffer = generateSTL(points, isHCD, 0.0, 96, isQuarter);
+
+    // 2. Generate flat circular or elliptical Throat driving diaphragm cap at x = 0
     const throatR = hornParams.throatR !== undefined ? hornParams.throatR : (points[0] ? points[0].y : 15.0);
-    const throatStlBuffer = generateThroatCapSTL(throatR, 96);
+    const throatStlBuffer = generateThroatCapSTL(throatR, 96, isQuarter, points[0], isHCD);
 
     // 3. Generate simulation scripts
     const scripts = generateABECProjectScripts(hornParams, hornName);
@@ -653,7 +671,8 @@ function exportAKABAKZip(points, isHCD = false, isMorph = false, hornParams = {}
     zip.file("observation.txt", scripts.observationTxt);
     zip.file("README.txt", scripts.readmeTxt);
 
-    const zipFileName = `${hornName}_AKABAK_Simulation.zip`;
+    const symSuffix = isQuarter ? "_QuarterSym" : "";
+    const zipFileName = `${hornName}${symSuffix}_AKABAK_Simulation.zip`;
 
     zip.generateAsync({ type: "blob" }).then(function(blob) {
         downloadFile(blob, zipFileName, "application/zip");

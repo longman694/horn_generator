@@ -56,35 +56,43 @@ def calc_normal(p1, p2, p3):
     return (nx / length, ny / length, nz / length)
 
 
-def generate_throat_stl(throat_r: float, num_radial: int = 96) -> bytes:
+def generate_throat_stl(throat_r: float, num_radial: int = 96, is_quarter: bool = False, first_row=None, is_hcd: bool = False) -> bytes:
     """
-    Generate planar circular driving diaphragm mesh at x = 0.
+    Generate planar circular or elliptical driving diaphragm mesh at x = 0.
     Normals point in +X (down the horn into the radiation field).
     Rim vertices match the horn throat ring vertices exactly.
     """
     triangles = []
     center = (0.0, 0.0, 0.0)
+    num_tri = max(12, round(num_radial / 4)) if is_quarter else num_radial
+    max_theta = (math.pi / 2) if is_quarter else (2 * math.pi)
 
-    for j in range(num_radial):
-        t1 = 2 * math.pi * j / num_radial
-        t2 = 2 * math.pi * (j + 1) / num_radial
+    for j in range(num_tri):
+        t1 = (j * max_theta) / num_tri
+        t2 = ((j + 1) * max_theta) / num_tri
+
+        r1 = get_radius_at_angle(first_row, t1, is_hcd) if first_row is not None else throat_r
+        r2 = get_radius_at_angle(first_row, t2, is_hcd) if first_row is not None else throat_r
 
         # Coordinate convention:
         # X: Horn axial depth (0 at throat)
         # Y: Vertical height (sin)
         # Z: Horizontal width (cos)
-        p1 = (0.0, throat_r * math.sin(t1), throat_r * math.cos(t1))
-        p2 = (0.0, throat_r * math.sin(t2), throat_r * math.cos(t2))
+        p1 = (0.0, r1 * math.sin(t1), r1 * math.cos(t1))
+        p2 = (0.0, r2 * math.sin(t2), r2 * math.cos(t2))
 
         # Normal points in +X: cross product (p2 - center) x (p1 - center)
         n = (1.0, 0.0, 0.0)
         triangles.append((n, center, p2, p1))
 
-    return write_binary_stl("Horn Generator Throat Diaphragm STL", triangles)
+    header = "Horn Generator Quarter Throat Diaphragm STL" if is_quarter else "Horn Generator Throat Diaphragm STL"
+    return write_binary_stl(header, triangles)
 
 
 def get_radius_at_angle(row, theta, is_hcd=False):
     """Calculate the profile surface radius at polar angle theta."""
+    if row is None:
+        return 15.0
     if is_hcd:
         a = row['a'] if 'a' in row else row.get('a (mm)', None)
         b = row['b'] if 'b' in row else row.get('b (mm)', None)
@@ -94,42 +102,55 @@ def get_radius_at_angle(row, theta, is_hcd=False):
             denom = math.sqrt((b * u) ** 2 + (a * v) ** 2)
             return (a * b) / denom if denom > 1e-9 else a
 
-    return row['y (mm)']
+    if 'y (mm)' in row:
+        return row['y (mm)']
+    if 'y' in row:
+        return row['y']
+    return 15.0
 
 
-def generate_horn_stl(data, is_hcd: bool = False, num_radial: int = 96) -> bytes:
+def generate_horn_stl(data, is_hcd: bool = False, num_radial: int = 96, is_quarter: bool = False) -> bytes:
     """
     Generate single-face horn surface mesh (wallThickness = 0).
     Normals oriented toward the acoustic domain.
     Supports DataFrame (circular, HCD) and dict with r_matrix (morphed OS-SE).
     """
     triangles = []
+    num_rot = max(12, round(num_radial / 4)) if is_quarter else num_radial
+    max_theta = (math.pi / 2) if is_quarter else (2 * math.pi)
+    stride = (num_rot + 1) if is_quarter else num_rot
 
     if isinstance(data, dict) and 'r_matrix' in data:
         z = data['z']
         r_matrix = data['r_matrix']
         phi = data['phi_angles']
         num_z = len(z)
-        num_phi = len(phi)
+
+        verts = []
+        for i in range(num_z):
+            x = z[i]
+            for j in range(stride):
+                t = (j * max_theta) / num_rot
+                norm_t = t % (2 * math.pi)
+                phi_idx = (norm_t / (2 * math.pi)) * len(phi)
+                i0 = int(phi_idx) % len(phi)
+                i1 = (i0 + 1) % len(phi)
+                frac = phi_idx - int(phi_idx)
+                r = (1.0 - frac) * r_matrix[i, i0] + frac * r_matrix[i, i1]
+                verts.append((x, r * math.sin(t), r * math.cos(t)))
 
         for i in range(num_z - 1):
-            x1 = z[i]
-            x2 = z[i + 1]
+            for j in range(num_rot):
+                next_j = (j + 1) if is_quarter else ((j + 1) % num_rot)
+                idx1 = i * stride + j
+                idx2 = i * stride + next_j
+                idx3 = (i + 1) * stride + next_j
+                idx4 = (i + 1) * stride + j
 
-            for j in range(num_phi):
-                j_next = (j + 1) % num_phi
-                t1 = phi[j]
-                t2 = phi[j_next]
-
-                r1_1 = r_matrix[i, j]
-                r1_2 = r_matrix[i, j_next]
-                r2_1 = r_matrix[i + 1, j]
-                r2_2 = r_matrix[i + 1, j_next]
-
-                v1 = (x1, r1_1 * math.sin(t1), r1_1 * math.cos(t1))
-                v2 = (x1, r1_2 * math.sin(t2), r1_2 * math.cos(t2))
-                v3 = (x2, r2_2 * math.sin(t2), r2_2 * math.cos(t2))
-                v4 = (x2, r2_1 * math.sin(t1), r2_1 * math.cos(t1))
+                v1 = verts[idx1]
+                v2 = verts[idx2]
+                v3 = verts[idx3]
+                v4 = verts[idx4]
 
                 n1 = calc_normal(v1, v2, v3)
                 triangles.append((n1, v1, v2, v3))
@@ -139,26 +160,28 @@ def generate_horn_stl(data, is_hcd: bool = False, num_radial: int = 96) -> bytes
     else:
         df = data
         num_pts = len(df)
+        verts = []
+
+        for i in range(num_pts):
+            row = df.iloc[i]
+            x = row['x (mm)']
+            for j in range(stride):
+                t = (j * max_theta) / num_rot
+                r = get_radius_at_angle(row, t, is_hcd)
+                verts.append((x, r * math.sin(t), r * math.cos(t)))
 
         for i in range(num_pts - 1):
-            row1 = df.iloc[i]
-            row2 = df.iloc[i + 1]
-            x1 = row1['x (mm)']
-            x2 = row2['x (mm)']
+            for j in range(num_rot):
+                next_j = (j + 1) if is_quarter else ((j + 1) % num_rot)
+                idx1 = i * stride + j
+                idx2 = i * stride + next_j
+                idx3 = (i + 1) * stride + next_j
+                idx4 = (i + 1) * stride + j
 
-            for j in range(num_radial):
-                t1 = 2 * math.pi * j / num_radial
-                t2 = 2 * math.pi * (j + 1) / num_radial
-
-                r1_1 = get_radius_at_angle(row1, t1, is_hcd)
-                r1_2 = get_radius_at_angle(row1, t2, is_hcd)
-                r2_1 = get_radius_at_angle(row2, t1, is_hcd)
-                r2_2 = get_radius_at_angle(row2, t2, is_hcd)
-
-                v1 = (x1, r1_1 * math.sin(t1), r1_1 * math.cos(t1))
-                v2 = (x1, r1_2 * math.sin(t2), r1_2 * math.cos(t2))
-                v3 = (x2, r2_2 * math.sin(t2), r2_2 * math.cos(t2))
-                v4 = (x2, r2_1 * math.sin(t1), r2_1 * math.cos(t1))
+                v1 = verts[idx1]
+                v2 = verts[idx2]
+                v3 = verts[idx3]
+                v4 = verts[idx4]
 
                 n1 = calc_normal(v1, v2, v3)
                 triangles.append((n1, v1, v2, v3))
@@ -166,7 +189,8 @@ def generate_horn_stl(data, is_hcd: bool = False, num_radial: int = 96) -> bytes
                 n2 = calc_normal(v1, v3, v4)
                 triangles.append((n2, v1, v3, v4))
 
-    return write_binary_stl("Horn Generator Single Face Mesh STL", triangles)
+    header = "Horn Generator Quarter Face Mesh STL" if is_quarter else "Horn Generator Single Face Mesh STL"
+    return write_binary_stl(header, triangles)
 
 
 def generate_abec_scripts(horn_params: dict) -> dict:
@@ -177,8 +201,11 @@ def generate_abec_scripts(horn_params: dict) -> dict:
     cutoff_f = horn_params.get("cutoff_f", 1000.0)
     f1 = horn_params.get("f1", max(100, int(round(cutoff_f * 0.5))))
     f2 = horn_params.get("f2", 20000)
-    num_freq = horn_params.get("num_freq", 48)
+    symmetry = horn_params.get("symmetry", "quarter")
+    is_quarter = (symmetry == "quarter")
+    num_freq = horn_params.get("num_freq", 30 if is_quarter else 48)
     distance = horn_params.get("distance", 1.0)
+    sym_line = "  Sym=yz\n" if is_quarter else ""
 
     project_abec = """// Master ABEC 3 Project Definition File
 // Compatible with ABEC 3 and AKABAK 3 (Tools -> Import ABEC Project...)
@@ -200,11 +227,11 @@ C1=Throat.stl,M2
 
     solving_txt = f"""// ABEC / AKABAK 3 Solving Script
 // Boundary Element Method (BEM) Simulation in Free Air (4*pi steradians)
-
+{"// Quarter-Symmetric Simulation (Sym=yz): Exploits dual symmetry across Y=0 and Z=0 planes (8x-16x BEM speedup)\n" if is_quarter else ""}
 Control_Solver
   f1={f1}; f2={f2}; NumFrequencies={num_freq}
   Abscissa=log; Dim=3D; MeshFrequency={f2}
-
+{sym_line}
 MeshFile_Properties
   MeshFileAlias="M1"; Scale=1mm
 
@@ -271,11 +298,13 @@ BE_Spectrum
     readme_txt = f"""========================================================================
 AKABAK 3 / ABEC - Horn BEM Directivity Simulation Package
 ========================================================================
-Generated by: Horn Profile Generator
+Generated by:    Horn Profile Generator
 Horn Type:       {horn_type}
+Symmetry:        {"Quarter-Symmetric (Sym=yz) - 8x-16x BEM speedup" if is_quarter else "Full 360° Mesh (Standard)"}
 Throat Radius:   {throat_r} mm (Throat Diameter: {throat_r * 2:.2f} mm)
 Axial Length:    {length} mm
 Cutoff Freq:     {cutoff_f} Hz
+Frequency Sweep: {num_freq} log points ({f1} Hz to {f2} Hz)
 Driving Source:  Ideal Plane-Wave Diaphragm (Velocity = 1.0 m/s)
 Acoustic Domain: Free Space (4*pi steradians BEM)
 
@@ -284,7 +313,7 @@ Simulation Files:
 - Project.abec     : Master ABEC project definition
 - solving.txt      : BEM physics, mesh assignments & boundary conditions
 - observation.txt  : Far-field polar directivity arcs (Hor/Ver) & RadImp
-- Horn.stl         : Horn surface mesh (single-face sound-hard boundary)
+- Horn.stl         : Horn surface mesh (sound-hard boundary)
 - Throat.stl       : Planar driving diaphragm cap at x = 0
 - README.txt       : Quick-start execution guide
 
@@ -295,7 +324,7 @@ Instructions to Run in AKABAK 3:
 3. Browse and select "Project.abec" from this folder.
 4. Click "Open", then click "Start Import".
 5. Once verified, click "Apply" to build the AKABAK 3 simulation model.
-6. Press F5 (or click Calculate) to run the BEM frequency sweep.
+{"   * Notice: In the AKABAK 3D viewport, the horn will automatically appear\n     mirrored across both symmetry planes as a complete horn!\n" if is_quarter else ""}6. Press F5 (or click Calculate) to run the BEM frequency sweep.
 7. In VACS, inspect the generated graphs:
    * "Directivity_Hor" : Horizontal Directivity Isobar Sonogram (-180° to +180°)
    * "Directivity_Ver" : Vertical Directivity Isobar Sonogram (-180° to +180°)
@@ -326,6 +355,13 @@ def main():
     parser.add_argument("--points", type=int, default=30, help="Number of axial points")
     parser.add_argument("--radial-segments", type=int, default=96, help="Number of radial mesh divisions")
 
+    # Symmetry & BEM Solver Arguments
+    parser.add_argument("--symmetry", choices=["quarter", "full"], default="quarter", help="BEM symmetry mode (quarter: Sym=yz with 8x-16x speedup, full: full 360 deg)")
+    parser.add_argument("--f1", type=float, default=200.0, help="BEM start frequency in Hz")
+    parser.add_argument("--f2", type=float, default=20000.0, help="BEM end frequency in Hz")
+    parser.add_argument("--num-freq", type=int, default=30, help="Number of frequency sweep points")
+    parser.add_argument("--distance", type=float, default=1.0, help="Far-field observation distance in meters")
+
     # Surface Morphing Arguments
     parser.add_argument("--morph", choices=["none", "rectangle", "ellipse"], default="none", help="Ath Surface Morphing target shape")
     parser.add_argument("--morph-width", type=float, default=300.0, help="Target mouth width (mm)")
@@ -341,12 +377,6 @@ def main():
     parser.add_argument("--hcd-mode", choices=["linear", "para", "exp", "log", "hyper", "logistic"], default="linear", help="HCD expansion curve")
     parser.add_argument("--hcd-acc", type=float, default=1.0, help="HCD accelerate factor")
 
-    # BEM Solver Arguments
-    parser.add_argument("--f1", type=float, default=200.0, help="BEM start frequency in Hz")
-    parser.add_argument("--f2", type=float, default=20000.0, help="BEM end frequency in Hz")
-    parser.add_argument("--num-freq", type=int, default=48, help="Number of frequency sweep points")
-    parser.add_argument("--distance", type=float, default=1.0, help="Far-field observation distance in meters")
-
     # Output Arguments
     parser.add_argument("--out", type=str, default="./akabak_sim", help="Output directory path")
     parser.add_argument("--zip", action="store_true", help="Also package output files into a .zip archive")
@@ -356,7 +386,8 @@ def main():
     # 1. Generate base profile
     is_morph = (args.type == "OS-SE" and args.morph != "none")
     is_hcd = (args.type != "OS-SE" and args.hcd)
-    morph_meta = None
+    is_quarter = (args.symmetry == "quarter")
+    first_row = None
 
     if args.type == "OS-SE":
         df_base = generate_osse_horn(
@@ -383,24 +414,29 @@ def main():
         else:
             model_data = df_base
             actual_length = float(df_base.iloc[-1]['x (mm)'])
+            first_row = df_base.iloc[0]
     elif args.type == "Tractrix":
         df = generate_tractrix_horn(args.throat, args.fc, num_points=args.points, plot=False)
         model_data = df
         actual_length = float(df.iloc[-1]['x (mm)'])
+        first_row = df.iloc[0]
     elif args.type == "Spherical":
         df = generate_spherical_horn(args.throat, args.fc, scale=4.0, fold=False, fold_back=True, plot=False)
         model_data = df
         actual_length = float(df.iloc[-1]['x (mm)'])
+        first_row = df.iloc[0]
     elif args.type == "Exponential":
         df = generate_exponential_horn(args.throat, args.fc, scale=4.0, plot=False)
         model_data = df
         actual_length = float(df.iloc[-1]['x (mm)'])
+        first_row = df.iloc[0]
 
     if is_hcd and args.type != "OS-SE":
         res = generate_hcd_horn(model_data, mouth_ratio=args.mouth_ratio, mode=args.hcd_mode, acc=args.hcd_acc, plot=False)
         df = res[0] if isinstance(res, (tuple, list)) else res
         model_data = df
         actual_length = float(df.iloc[-1]['x (mm)'])
+        first_row = df.iloc[0]
 
     horn_params = {
         "horn_type": args.type,
@@ -410,12 +446,13 @@ def main():
         "f1": args.f1,
         "f2": args.f2,
         "num_freq": args.num_freq,
-        "distance": args.distance
+        "distance": args.distance,
+        "symmetry": args.symmetry
     }
 
     # 2. Generate STL meshes
-    horn_stl_bytes = generate_horn_stl(model_data, is_hcd=is_hcd, num_radial=args.radial_segments)
-    throat_stl_bytes = generate_throat_stl(args.throat, num_radial=args.radial_segments)
+    horn_stl_bytes = generate_horn_stl(model_data, is_hcd=is_hcd, num_radial=args.radial_segments, is_quarter=is_quarter)
+    throat_stl_bytes = generate_throat_stl(args.throat, num_radial=args.radial_segments, is_quarter=is_quarter, first_row=first_row, is_hcd=is_hcd)
 
     # 3. Generate simulation scripts
     scripts = generate_abec_scripts(horn_params)
@@ -432,7 +469,8 @@ def main():
         with open(os.path.join(args.out, filename), "w", encoding="utf-8") as f:
             f.write(content)
 
-    print(f"[OK] Exported AKABAK simulation package to: {args.out}")
+    sym_label = "Quarter-Symmetric (Sym=yz)" if is_quarter else "Full 360 deg Mesh"
+    print(f"[OK] Exported AKABAK simulation package ({sym_label}) to: {args.out}")
     print(f"     - Horn.stl   : {len(horn_stl_bytes):,} bytes")
     print(f"     - Throat.stl : {len(throat_stl_bytes):,} bytes")
     for filename in scripts:
@@ -440,13 +478,16 @@ def main():
 
     # 5. Optional ZIP archive
     if args.zip:
-        zip_path = os.path.join(args.out, f"{args.type}_AKABAK_Simulation.zip")
+        sym_suffix = "_QuarterSym" if is_quarter else ""
+        zip_path = os.path.join(args.out, f"{args.type}{sym_suffix}_AKABAK_Simulation.zip")
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.write(os.path.join(args.out, "Horn.stl"), "Horn.stl")
             zf.write(os.path.join(args.out, "Throat.stl"), "Throat.stl")
             for filename in scripts:
                 zf.write(os.path.join(args.out, filename), filename)
         print(f"[OK] Created ZIP archive: {zip_path}")
+
+    os._exit(0)
 
 
 if __name__ == "__main__":

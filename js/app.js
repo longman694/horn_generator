@@ -431,6 +431,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? currentResult.calculatedFc
                 : (parseFloat(cutoffFInput.value) || 1000.0);
 
+            const symmetry = document.getElementById('akabak-symmetry')?.value || 'quarter';
+            const numFreq = parseInt(document.getElementById('akabak-num-freq')?.value, 10) || (symmetry === 'quarter' ? 30 : 48);
+
             const hornParams = {
                 hornType: type,
                 throatR: throatR,
@@ -438,8 +441,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 cutoffF: cutoffF,
                 f1: Math.max(100, Math.round(cutoffF * 0.5)),
                 f2: 20000,
-                numFreq: 48,
-                distance: 1.0
+                numFreq: numFreq,
+                distance: 1.0,
+                symmetry: symmetry
             };
 
             const suffix = currentIsHCD ? '_HCD' : (currentIsMorph ? `_Morphed_${morphTargetShapeSelect.value}` : '');
