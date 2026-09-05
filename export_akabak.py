@@ -56,14 +56,14 @@ def calc_normal(p1, p2, p3):
     return (nx / length, ny / length, nz / length)
 
 
-def generate_throat_stl(throat_r: float, num_radial: int = 96, is_quarter: bool = False, first_row=None, is_hcd: bool = False) -> bytes:
+def generate_throat_stl(throat_r: float, length: float = 0.0, num_radial: int = 96, is_quarter: bool = False, first_row=None, is_hcd: bool = False) -> bytes:
     """
-    Generate planar circular or elliptical driving diaphragm mesh at x = 0.
-    Normals point in +X (down the horn into the radiation field).
+    Generate planar circular or elliptical driving diaphragm mesh at z = -length.
+    Normals point in +Z (down the horn into the interior acoustic domain).
     Rim vertices match the horn throat ring vertices exactly.
     """
     triangles = []
-    center = (0.0, 0.0, 0.0)
+    center = (0.0, 0.0, -length)
     num_tri = max(12, round(num_radial / 4)) if is_quarter else num_radial
     max_theta = (math.pi / 2) if is_quarter else (2 * math.pi)
 
@@ -74,18 +74,47 @@ def generate_throat_stl(throat_r: float, num_radial: int = 96, is_quarter: bool 
         r1 = get_radius_at_angle(first_row, t1, is_hcd) if first_row is not None else throat_r
         r2 = get_radius_at_angle(first_row, t2, is_hcd) if first_row is not None else throat_r
 
-        # Coordinate convention:
-        # X: Horn axial depth (0 at throat)
+        # ABEC Standard Coordinate Convention:
+        # Z: Axial propagation (throat at -length, mouth at 0)
+        # X: Horizontal width (cos)
         # Y: Vertical height (sin)
-        # Z: Horizontal width (cos)
-        p1 = (0.0, r1 * math.sin(t1), r1 * math.cos(t1))
-        p2 = (0.0, r2 * math.sin(t2), r2 * math.cos(t2))
+        p1 = (r1 * math.cos(t1), r1 * math.sin(t1), -length)
+        p2 = (r2 * math.cos(t2), r2 * math.sin(t2), -length)
 
-        # Normal points in +X: cross product (p2 - center) x (p1 - center)
-        n = (1.0, 0.0, 0.0)
-        triangles.append((n, center, p2, p1))
+        # Normal points in +Z: cross product (p1 - center) x (p2 - center)
+        n = (0.0, 0.0, 1.0)
+        triangles.append((n, center, p1, p2))
 
     header = "Horn Generator Quarter Throat Diaphragm STL" if is_quarter else "Horn Generator Throat Diaphragm STL"
+    return write_binary_stl(header, triangles)
+
+
+def generate_interface_stl(mouth_r: float, num_radial: int = 96, is_quarter: bool = False, last_row=None, is_hcd: bool = False) -> bytes:
+    """
+    Generate planar mouth interface aperture cap mesh at z = 0 (origin plane).
+    Normals point in -Z (back into Subdomain 1 / interior cavity) per ABEC interface convention.
+    Rim vertices match the horn mouth ring vertices exactly.
+    """
+    triangles = []
+    center = (0.0, 0.0, 0.0)
+    num_tri = max(12, round(num_radial / 4)) if is_quarter else num_radial
+    max_theta = (math.pi / 2) if is_quarter else (2 * math.pi)
+
+    for j in range(num_tri):
+        t1 = (j * max_theta) / num_tri
+        t2 = ((j + 1) * max_theta) / num_tri
+
+        r1 = get_radius_at_angle(last_row, t1, is_hcd) if last_row is not None else mouth_r
+        r2 = get_radius_at_angle(last_row, t2, is_hcd) if last_row is not None else mouth_r
+
+        p1 = (r1 * math.cos(t1), r1 * math.sin(t1), 0.0)
+        p2 = (r2 * math.cos(t2), r2 * math.sin(t2), 0.0)
+
+        # Normal points in -Z: cross product (p2 - center) x (p1 - center)
+        n = (0.0, 0.0, -1.0)
+        triangles.append((n, center, p2, p1))
+
+    header = "Horn Generator Quarter Mouth Interface STL" if is_quarter else "Horn Generator Mouth Interface STL"
     return write_binary_stl(header, triangles)
 
 
@@ -112,7 +141,9 @@ def get_radius_at_angle(row, theta, is_hcd=False):
 def generate_horn_stl(data, is_hcd: bool = False, num_radial: int = 96, is_quarter: bool = False) -> bytes:
     """
     Generate single-face horn surface mesh (wallThickness = 0).
-    Normals oriented toward the acoustic domain.
+    Mouth positioned at origin plane z = 0, throat positioned at z = -length.
+    X: Horizontal width (cos), Y: Vertical height (sin), Z: Axial propagation.
+    Normals oriented inwards toward the interior acoustic domain.
     Supports DataFrame (circular, HCD) and dict with r_matrix (morphed OS-SE).
     """
     triangles = []
@@ -121,14 +152,16 @@ def generate_horn_stl(data, is_hcd: bool = False, num_radial: int = 96, is_quart
     stride = (num_rot + 1) if is_quarter else num_rot
 
     if isinstance(data, dict) and 'r_matrix' in data:
-        z = data['z']
+        raw_z = data['z']
         r_matrix = data['r_matrix']
         phi = data['phi_angles']
-        num_z = len(z)
+        num_z = len(raw_z)
+        total_len = float(raw_z[-1])
 
         verts = []
         for i in range(num_z):
-            x = z[i]
+            # Shift z so mouth is at z = 0 and throat is at z = -total_len
+            z_val = float(raw_z[i]) - total_len
             for j in range(stride):
                 t = (j * max_theta) / num_rot
                 norm_t = t % (2 * math.pi)
@@ -137,7 +170,7 @@ def generate_horn_stl(data, is_hcd: bool = False, num_radial: int = 96, is_quart
                 i1 = (i0 + 1) % len(phi)
                 frac = phi_idx - int(phi_idx)
                 r = (1.0 - frac) * r_matrix[i, i0] + frac * r_matrix[i, i1]
-                verts.append((x, r * math.sin(t), r * math.cos(t)))
+                verts.append((r * math.cos(t), r * math.sin(t), z_val))
 
         for i in range(num_z - 1):
             for j in range(num_rot):
@@ -152,23 +185,26 @@ def generate_horn_stl(data, is_hcd: bool = False, num_radial: int = 96, is_quart
                 v3 = verts[idx3]
                 v4 = verts[idx4]
 
-                n1 = calc_normal(v1, v2, v3)
-                triangles.append((n1, v1, v2, v3))
+                # Inward-pointing normal winding
+                n1 = calc_normal(v1, v3, v2)
+                triangles.append((n1, v1, v3, v2))
 
-                n2 = calc_normal(v1, v3, v4)
-                triangles.append((n2, v1, v3, v4))
+                n2 = calc_normal(v1, v4, v3)
+                triangles.append((n2, v1, v4, v3))
     else:
         df = data
         num_pts = len(df)
+        total_len = float(df['x (mm)'].iloc[-1])
         verts = []
 
         for i in range(num_pts):
             row = df.iloc[i]
-            x = row['x (mm)']
+            # Shift z so mouth is at z = 0 and throat is at z = -total_len
+            z_val = float(row['x (mm)']) - total_len
             for j in range(stride):
                 t = (j * max_theta) / num_rot
                 r = get_radius_at_angle(row, t, is_hcd)
-                verts.append((x, r * math.sin(t), r * math.cos(t)))
+                verts.append((r * math.cos(t), r * math.sin(t), z_val))
 
         for i in range(num_pts - 1):
             for j in range(num_rot):
@@ -183,20 +219,22 @@ def generate_horn_stl(data, is_hcd: bool = False, num_radial: int = 96, is_quart
                 v3 = verts[idx3]
                 v4 = verts[idx4]
 
-                n1 = calc_normal(v1, v2, v3)
-                triangles.append((n1, v1, v2, v3))
+                # Inward-pointing normal winding
+                n1 = calc_normal(v1, v3, v2)
+                triangles.append((n1, v1, v3, v2))
 
-                n2 = calc_normal(v1, v3, v4)
-                triangles.append((n2, v1, v3, v4))
+                n2 = calc_normal(v1, v4, v3)
+                triangles.append((n2, v1, v4, v3))
 
     header = "Horn Generator Quarter Face Mesh STL" if is_quarter else "Horn Generator Single Face Mesh STL"
     return write_binary_stl(header, triangles)
 
 
 def generate_abec_scripts(horn_params: dict) -> dict:
-    """Generate script files for ABEC 3 / AKABAK 3 BEM simulation."""
+    """Generate script files for ABEC 3 / AKABAK 3 BEM simulation with Infinite Baffle."""
     horn_type = horn_params.get("horn_type", "OS-SE")
     throat_r = horn_params.get("throat_r", 15.0)
+    mouth_r = horn_params.get("mouth_r", 50.0)
     length = horn_params.get("length", 50.0)
     cutoff_f = horn_params.get("cutoff_f", 1000.0)
     f1 = horn_params.get("f1", max(100, int(round(cutoff_f * 0.5))))
@@ -205,7 +243,7 @@ def generate_abec_scripts(horn_params: dict) -> dict:
     is_quarter = (symmetry == "quarter")
     num_freq = horn_params.get("num_freq", 30 if is_quarter else 48)
     distance = horn_params.get("distance", 1.0)
-    sym_line = "  Sym=yz\n" if is_quarter else ""
+    sym_line = "  Sym=xy\n" if is_quarter else ""
 
     project_abec = """// Master ABEC 3 Project Definition File
 // Compatible with ABEC 3 and AKABAK 3 (Tools -> Import ABEC Project...)
@@ -223,11 +261,13 @@ C0=observation.txt
 [MeshFiles]
 C0=Horn.stl,M1
 C1=Throat.stl,M2
+C2=Interface.stl,M3
 """
 
     solving_txt = f"""// ABEC / AKABAK 3 Solving Script
-// Boundary Element Method (BEM) Simulation in Free Air (4*pi steradians)
-{"// Quarter-Symmetric Simulation (Sym=yz): Exploits dual symmetry across Y=0 and Z=0 planes (8x-16x BEM speedup)\n" if is_quarter else ""}
+// Boundary Element Method (BEM) Simulation with Infinite Baffle (2*pi steradians)
+// Origin Plane Alignment: Mouth sits at z = 0, Throat recessed at z = -{length:.2f}mm
+{"// Quarter-Symmetric Simulation (Sym=xy): Dual symmetry across X=0 and Y=0 planes (8x-16x BEM speedup)\n" if is_quarter else ""}
 Control_Solver
   f1={f1}; f2={f2}; NumFrequencies={num_freq}
   Abscissa=log; Dim=3D; MeshFrequency={f2}
@@ -238,25 +278,42 @@ MeshFile_Properties
 MeshFile_Properties
   MeshFileAlias="M2"; Scale=1mm
 
+MeshFile_Properties
+  MeshFileAlias="M3"; Scale=1mm
+
+// Subdomain 1: Enclosed Horn Interior Volume
 SubDomain_Properties
-  SubDomain=1; ElType=Exterior
+  SubDomain=1; ElType=Interior
+
+// Subdomain 2: Exterior Radiation Half-Space in front of Infinite Baffle (z = 0)
+SubDomain_Properties
+  SubDomain=2; ElType=Exterior; IBPlane=z; IBOffset=0mm
 
 // Horn Wall Boundary (Rigid sound-hard boundary: vn = 0)
 Elements "Horn_Wall"
   Subdomain=1; MeshFileAlias="M1"
   101 Mesh Include ALL
 
-// Throat Driving Diaphragm (Acoustic Velocity excitation)
+// Mouth Interface (Couples interior Subdomain 1 to exterior Subdomain 2)
+Elements "Mouth_Interface"
+  Subdomain=1,2; MeshFileAlias="M3"
+  301 Mesh Include ALL
+
+// Throat Driving Diaphragm (Acoustic Velocity excitation at z = -{length:.2f}mm)
 Elements "Throat_Diaphragm"
   Subdomain=1; MeshFileAlias="M2"
   201 Mesh Include ALL
 
-Driving "Throat_Driver"
-  RefElements="Throat_Diaphragm"; DrvGroup=1001;
+Driving "Throat_Diaphragm"
+  RefElements="Throat_Diaphragm"
+  DrvGroup=1001
+  DrvWeight=1.0
+  Direction=z
+  1  201  RefElements="Throat_Diaphragm"  Weight=1.0
 """
 
     observation_txt = f"""// ABEC / AKABAK 3 Observation Script
-// Far-field Directivity & Acoustic Radiation Impedance
+// Far-field Directivity & Acoustic Radiation Impedance (Front Half-Space)
 
 Driving_Values
   DrvType=Velocity; Value=1.0
@@ -270,29 +327,29 @@ Radiation_Impedance
   Range_min=0; Range_max=2
   1  1001  1001  ID=1001
 
-// Horizontal Directivity Sonogram (-180 to +180 deg in horizontal X-Z plane)
+// Horizontal Directivity Sonogram (-90 to +90 deg in horizontal X-Z plane, On-axis = +Z)
 BE_Spectrum
   PlotType=Polar
   GraphHeader="Directivity_Hor"
   BodeType=LeveldB
   Range_min=-45; Range_max=5
-  PolarRange=-180,180,145
-  BasePlane=xz
+  PolarRange=-90,90,91
+  BasePlane=zx
   Farfield=true
   Distance={distance}m
-  1  Inclination=0  ID=101
+  1  Inclination=0  DrvGroups=1001  ID=101
 
-// Vertical Directivity Sonogram (-180 to +180 deg in vertical X-Y plane)
+// Vertical Directivity Sonogram (-90 to +90 deg in vertical Y-Z plane, On-axis = +Z)
 BE_Spectrum
   PlotType=Polar
   GraphHeader="Directivity_Ver"
   BodeType=LeveldB
   Range_min=-45; Range_max=5
-  PolarRange=-180,180,145
-  BasePlane=xy
+  PolarRange=-90,90,91
+  BasePlane=zy
   Farfield=true
   Distance={distance}m
-  1  Inclination=0  ID=102
+  1  Inclination=0  DrvGroups=1001  ID=102
 """
 
     readme_txt = f"""========================================================================
@@ -300,21 +357,23 @@ AKABAK 3 / ABEC - Horn BEM Directivity Simulation Package
 ========================================================================
 Generated by:    Horn Profile Generator
 Horn Type:       {horn_type}
-Symmetry:        {"Quarter-Symmetric (Sym=yz) - 8x-16x BEM speedup" if is_quarter else "Full 360° Mesh (Standard)"}
-Throat Radius:   {throat_r} mm (Throat Diameter: {throat_r * 2:.2f} mm)
+Symmetry:        {"Quarter-Symmetric (Sym=xy) - 8x-16x BEM speedup" if is_quarter else "Full 360 deg Mesh (Standard)"}
+Throat Radius:   {throat_r} mm (Throat Diameter: {throat_r * 2:.2f} mm at z = -{length:.2f} mm)
+Mouth Radius:    {mouth_r} mm (Mouth Diameter: {mouth_r * 2:.2f} mm at z = 0.00 mm)
 Axial Length:    {length} mm
 Cutoff Freq:     {cutoff_f} Hz
 Frequency Sweep: {num_freq} log points ({f1} Hz to {f2} Hz)
 Driving Source:  Ideal Plane-Wave Diaphragm (Velocity = 1.0 m/s)
-Acoustic Domain: Free Space (4*pi steradians BEM)
+Acoustic Domain: Infinite Baffle on z = 0 (2*pi steradians Half-Space)
 
 Simulation Files:
 -----------------
 - Project.abec     : Master ABEC project definition
-- solving.txt      : BEM physics, mesh assignments & boundary conditions
-- observation.txt  : Far-field polar directivity arcs (Hor/Ver) & RadImp
-- Horn.stl         : Horn surface mesh (sound-hard boundary)
-- Throat.stl       : Planar driving diaphragm cap at x = 0
+- solving.txt      : BEM physics, Subdomains (1:Interior, 2:Exterior), Infinite Baffle & Boundaries
+- observation.txt  : Far-field polar directivity arcs (Hor X-Z / Ver Y-Z) & RadImp
+- Horn.stl         : Horn surface mesh (sound-hard boundary, z = -{length:.2f}mm to 0.00mm)
+- Throat.stl       : Planar driving diaphragm cap at z = -{length:.2f}mm
+- Interface.stl    : Planar mouth aperture interface mesh at z = 0.00mm
 - README.txt       : Quick-start execution guide
 
 Instructions to Run in AKABAK 3:
@@ -324,10 +383,10 @@ Instructions to Run in AKABAK 3:
 3. Browse and select "Project.abec" from this folder.
 4. Click "Open", then click "Start Import".
 5. Once verified, click "Apply" to build the AKABAK 3 simulation model.
-{"   * Notice: In the AKABAK 3D viewport, the horn will automatically appear\n     mirrored across both symmetry planes as a complete horn!\n" if is_quarter else ""}6. Press F5 (or click Calculate) to run the BEM frequency sweep.
+{"   * Notice: In the AKABAK 3D viewport, the horn will automatically appear\\n     mirrored across X and Y symmetry planes as a complete horn!\\n" if is_quarter else ""}6. Press F5 (or click Calculate) to run the BEM frequency sweep.
 7. In VACS, inspect the generated graphs:
-   * "Directivity_Hor" : Horizontal Directivity Isobar Sonogram (-180° to +180°)
-   * "Directivity_Ver" : Vertical Directivity Isobar Sonogram (-180° to +180°)
+   * "Directivity_Hor" : Horizontal Directivity Isobar Sonogram (-90 deg to +90 deg)
+   * "Directivity_Ver" : Vertical Directivity Isobar Sonogram (-90 deg to +90 deg)
    * "RadImp"          : Throat Radiation Resistance & Reactance
 ========================================================================
 """
@@ -438,9 +497,19 @@ def main():
         actual_length = float(df.iloc[-1]['x (mm)'])
         first_row = df.iloc[0]
 
+    # Extract last_row for mouth interface
+    if isinstance(model_data, dict) and 'r_matrix' in model_data:
+        last_row = model_data['r_matrix'][-1, :]
+        mouth_r = float(model_data['r_matrix'][-1, 0])
+        first_row = model_data['r_matrix'][0, :]
+    else:
+        last_row = model_data.iloc[-1]
+        mouth_r = float(last_row['y (mm)'] if 'y (mm)' in last_row else last_row.get('y', 50.0))
+
     horn_params = {
         "horn_type": args.type,
         "throat_r": args.throat,
+        "mouth_r": mouth_r,
         "length": actual_length,
         "cutoff_f": args.fc,
         "f1": args.f1,
@@ -452,7 +521,8 @@ def main():
 
     # 2. Generate STL meshes
     horn_stl_bytes = generate_horn_stl(model_data, is_hcd=is_hcd, num_radial=args.radial_segments, is_quarter=is_quarter)
-    throat_stl_bytes = generate_throat_stl(args.throat, num_radial=args.radial_segments, is_quarter=is_quarter, first_row=first_row, is_hcd=is_hcd)
+    throat_stl_bytes = generate_throat_stl(args.throat, length=actual_length, num_radial=args.radial_segments, is_quarter=is_quarter, first_row=first_row, is_hcd=is_hcd)
+    interface_stl_bytes = generate_interface_stl(mouth_r, num_radial=args.radial_segments, is_quarter=is_quarter, last_row=last_row, is_hcd=is_hcd)
 
     # 3. Generate simulation scripts
     scripts = generate_abec_scripts(horn_params)
@@ -465,14 +535,18 @@ def main():
     with open(os.path.join(args.out, "Throat.stl"), "wb") as f:
         f.write(throat_stl_bytes)
 
+    with open(os.path.join(args.out, "Interface.stl"), "wb") as f:
+        f.write(interface_stl_bytes)
+
     for filename, content in scripts.items():
         with open(os.path.join(args.out, filename), "w", encoding="utf-8") as f:
             f.write(content)
 
-    sym_label = "Quarter-Symmetric (Sym=yz)" if is_quarter else "Full 360 deg Mesh"
+    sym_label = "Quarter-Symmetric (Sym=xy)" if is_quarter else "Full 360 deg Mesh"
     print(f"[OK] Exported AKABAK simulation package ({sym_label}) to: {args.out}")
-    print(f"     - Horn.stl   : {len(horn_stl_bytes):,} bytes")
-    print(f"     - Throat.stl : {len(throat_stl_bytes):,} bytes")
+    print(f"     - Horn.stl      : {len(horn_stl_bytes):,} bytes (z = -{actual_length:.2f}mm to 0.00mm)")
+    print(f"     - Throat.stl    : {len(throat_stl_bytes):,} bytes (z = -{actual_length:.2f}mm)")
+    print(f"     - Interface.stl : {len(interface_stl_bytes):,} bytes (z = 0.00mm origin plane)")
     for filename in scripts:
         print(f"     - {filename}")
 
@@ -483,6 +557,7 @@ def main():
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.write(os.path.join(args.out, "Horn.stl"), "Horn.stl")
             zf.write(os.path.join(args.out, "Throat.stl"), "Throat.stl")
+            zf.write(os.path.join(args.out, "Interface.stl"), "Interface.stl")
             for filename in scripts:
                 zf.write(os.path.join(args.out, filename), filename)
         print(f"[OK] Created ZIP archive: {zip_path}")

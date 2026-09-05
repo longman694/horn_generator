@@ -429,11 +429,11 @@ function generateOBJ(points, isHCD = false, wallThickness = 2.0) {
  * Rim vertices match buildHornMeshGeometry(points, ..., 0, numRadial) at ring 0.
  */
 /**
- * Generate 3D STL for circular or elliptical throat driving diaphragm cap at x = 0 (Binary Format)
- * Normal vector points in +X (down the horn into the radiation field).
- * Rim vertices match buildHornMeshGeometry(points, ..., 0, numRadial) at ring 0.
+ * Generate 3D STL for circular or elliptical throat driving diaphragm cap at z = -length (Binary Format)
+ * Normal vector points in +Z (down the horn into the interior acoustic domain).
+ * Rim vertices match horn bore at ring 0.
  */
-function generateThroatCapSTL(throatRadius = 15.0, numRadial = 96, isQuarter = false, firstPoint = null, isHCD = false) {
+function generateThroatCapSTL(throatRadius = 15.0, length = 0.0, numRadial = 96, isQuarter = false, firstPoint = null, isHCD = false) {
     const numTri = isQuarter ? Math.max(12, Math.round(numRadial / 4)) : numRadial;
     const maxTheta = isQuarter ? (Math.PI / 2) : (2 * Math.PI);
     const bufferLength = 80 + 4 + numTri * 50;
@@ -450,7 +450,7 @@ function generateThroatCapSTL(throatRadius = 15.0, numRadial = 96, isQuarter = f
     view.setUint32(80, numTri, true);
 
     let offset = 84;
-    const center = [0.0, 0.0, 0.0];
+    const center = [0.0, 0.0, -length];
 
     for (let j = 0; j < numTri; j++) {
         const theta1 = (j * maxTheta) / numTri;
@@ -459,14 +459,80 @@ function generateThroatCapSTL(throatRadius = 15.0, numRadial = 96, isQuarter = f
         const r1 = firstPoint ? getRadiusAtAngle(firstPoint, theta1, isHCD) : throatRadius;
         const r2 = firstPoint ? getRadiusAtAngle(firstPoint, theta2, isHCD) : throatRadius;
 
-        // Vertices matching horn bore at x = 0
-        // Y = r * sin(theta), Z = r * cos(theta)
-        const p1 = [0.0, r1 * Math.sin(theta1), r1 * Math.cos(theta1)];
-        const p2 = [0.0, r2 * Math.sin(theta2), r2 * Math.cos(theta2)];
+        // ABEC Standard Coordinates:
+        // X: Horizontal width (cos), Y: Vertical height (sin), Z: -length
+        const p1 = [r1 * Math.cos(theta1), r1 * Math.sin(theta1), -length];
+        const p2 = [r2 * Math.cos(theta2), r2 * Math.sin(theta2), -length];
 
-        // Normal points in +X: cross product (p2 - center) x (p1 - center)
-        // has positive X component: r^2 * sin(theta2 - theta1) > 0
-        const nx = 1.0, ny = 0.0, nz = 0.0;
+        // Normal points in +Z: cross product (p1 - center) x (p2 - center)
+        const nx = 0.0, ny = 0.0, nz = 1.0;
+
+        view.setFloat32(offset, nx, true);
+        view.setFloat32(offset + 4, ny, true);
+        view.setFloat32(offset + 8, nz, true);
+        offset += 12;
+
+        // Center
+        view.setFloat32(offset, center[0], true);
+        view.setFloat32(offset + 4, center[1], true);
+        view.setFloat32(offset + 8, center[2], true);
+        offset += 12;
+
+        // p1 (theta1)
+        view.setFloat32(offset, p1[0], true);
+        view.setFloat32(offset + 4, p1[1], true);
+        view.setFloat32(offset + 8, p1[2], true);
+        offset += 12;
+
+        // p2 (theta2)
+        view.setFloat32(offset, p2[0], true);
+        view.setFloat32(offset + 4, p2[1], true);
+        view.setFloat32(offset + 8, p2[2], true);
+        offset += 12;
+
+        view.setUint16(offset, 0, true);
+        offset += 2;
+    }
+
+    return buffer;
+}
+
+/**
+ * Generate 3D STL for mouth aperture interface cap at z = 0 (origin plane, Binary Format)
+ * Normal vector points in -Z (back into Subdomain 1 / interior cavity) per ABEC interface convention.
+ * Rim vertices match horn mouth rim at ring N-1.
+ */
+function generateMouthInterfaceSTL(mouthRadius = 50.0, numRadial = 96, isQuarter = false, lastPoint = null, isHCD = false) {
+    const numTri = isQuarter ? Math.max(12, Math.round(numRadial / 4)) : numRadial;
+    const maxTheta = isQuarter ? (Math.PI / 2) : (2 * Math.PI);
+    const bufferLength = 80 + 4 + numTri * 50;
+    const buffer = new ArrayBuffer(bufferLength);
+    const view = new DataView(buffer);
+
+    const headerStr = isQuarter ? "Horn Generator Quarter Mouth Interface STL" : "Horn Generator Mouth Interface STL";
+    for (let i = 0; i < 80; i++) {
+        view.setUint8(i, i < headerStr.length ? headerStr.charCodeAt(i) : 0);
+    }
+
+    view.setUint32(80, numTri, true);
+
+    let offset = 84;
+    const center = [0.0, 0.0, 0.0];
+
+    for (let j = 0; j < numTri; j++) {
+        const theta1 = (j * maxTheta) / numTri;
+        const theta2 = ((j + 1) * maxTheta) / numTri;
+
+        const r1 = lastPoint ? getRadiusAtAngle(lastPoint, theta1, isHCD) : mouthRadius;
+        const r2 = lastPoint ? getRadiusAtAngle(lastPoint, theta2, isHCD) : mouthRadius;
+
+        // ABEC Standard Coordinates:
+        // X: Horizontal width (cos), Y: Vertical height (sin), Z: 0.0
+        const p1 = [r1 * Math.cos(theta1), r1 * Math.sin(theta1), 0.0];
+        const p2 = [r2 * Math.cos(theta2), r2 * Math.sin(theta2), 0.0];
+
+        // Normal points in -Z: cross product (p2 - center) x (p1 - center)
+        const nx = 0.0, ny = 0.0, nz = -1.0;
 
         view.setFloat32(offset, nx, true);
         view.setFloat32(offset + 4, ny, true);
@@ -499,11 +565,112 @@ function generateThroatCapSTL(throatRadius = 15.0, numRadial = 96, isQuarter = f
 }
 
 /**
+ * Generate 3D STL for single-face Horn wall mesh aligned with ABEC Z-axis (Binary Format)
+ * Mouth sits on origin plane z = 0, throat sits recessed at z = -length.
+ * Normals point inward toward the central acoustic domain axis.
+ */
+function generateHornBEMSTL(points, isHCD = false, numRadial = 96, isQuarter = false) {
+    const numPoints = points.length;
+    const totalLen = numPoints > 0 ? points[numPoints - 1].x : 0.0;
+    const numRot = isQuarter ? Math.max(12, Math.round(numRadial / 4)) : numRadial;
+    const maxTheta = isQuarter ? (Math.PI / 2) : (2 * Math.PI);
+    const stride = isQuarter ? (numRot + 1) : numRot;
+
+    const vertices = [];
+    for (let i = 0; i < numPoints; i++) {
+        const p = points[i];
+        // Shift z so mouth is at z = 0 and throat is at z = -totalLen
+        const zVal = p.x - totalLen;
+        const jCount = isQuarter ? (numRot + 1) : numRot;
+
+        for (let j = 0; j < jCount; j++) {
+            const theta = (j * maxTheta) / numRot;
+            const rInner = getRadiusAtAngle(p, theta, isHCD);
+
+            // ABEC Coordinate Alignment:
+            // X: Horizontal width (cos theta)
+            // Y: Vertical height (sin theta)
+            // Z: Axial length (throat -totalLen -> mouth 0)
+            const x = rInner * Math.cos(theta);
+            const y = rInner * Math.sin(theta);
+            const z = zVal;
+            vertices.push(x, y, z);
+        }
+    }
+
+    const triangles = [];
+    for (let i = 0; i < numPoints - 1; i++) {
+        for (let j = 0; j < numRot; j++) {
+            const nextJ = isQuarter ? (j + 1) : ((j + 1) % numRot);
+            const idx1 = i * stride + j;
+            const idx2 = i * stride + nextJ;
+            const idx3 = (i + 1) * stride + nextJ;
+            const idx4 = (i + 1) * stride + j;
+
+            // Inward-pointing normal winding
+            triangles.push([idx1, idx3, idx2]);
+            triangles.push([idx1, idx4, idx3]);
+        }
+    }
+
+    const bufferLength = 80 + 4 + triangles.length * 50;
+    const buffer = new ArrayBuffer(bufferLength);
+    const view = new DataView(buffer);
+
+    const headerStr = isQuarter ? "Horn Generator Quarter Face BEM STL" : "Horn Generator Single Face BEM STL";
+    for (let i = 0; i < 80; i++) {
+        view.setUint8(i, i < headerStr.length ? headerStr.charCodeAt(i) : 0);
+    }
+    view.setUint32(80, triangles.length, true);
+
+    let offset = 84;
+    for (let t = 0; t < triangles.length; t++) {
+        const tri = triangles[t];
+        const p1 = [vertices[tri[0] * 3], vertices[tri[0] * 3 + 1], vertices[tri[0] * 3 + 2]];
+        const p2 = [vertices[tri[1] * 3], vertices[tri[1] * 3 + 1], vertices[tri[1] * 3 + 2]];
+        const p3 = [vertices[tri[2] * 3], vertices[tri[2] * 3 + 1], vertices[tri[2] * 3 + 2]];
+
+        const u = [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]];
+        const v = [p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]];
+        const nx = u[1] * v[2] - u[2] * v[1];
+        const ny = u[2] * v[0] - u[0] * v[2];
+        const nz = u[0] * v[1] - u[1] * v[0];
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+
+        view.setFloat32(offset, nx / len, true);
+        view.setFloat32(offset + 4, ny / len, true);
+        view.setFloat32(offset + 8, nz / len, true);
+        offset += 12;
+
+        view.setFloat32(offset, p1[0], true);
+        view.setFloat32(offset + 4, p1[1], true);
+        view.setFloat32(offset + 8, p1[2], true);
+        offset += 12;
+
+        view.setFloat32(offset, p2[0], true);
+        view.setFloat32(offset + 4, p2[1], true);
+        view.setFloat32(offset + 8, p2[2], true);
+        offset += 12;
+
+        view.setFloat32(offset, p3[0], true);
+        view.setFloat32(offset + 4, p3[1], true);
+        view.setFloat32(offset + 8, p3[2], true);
+        offset += 12;
+
+        view.setUint16(offset, 0, true);
+        offset += 2;
+    }
+
+    return buffer;
+}
+
+/**
  * Generate ABEC / AKABAK 3 BEM Project Scripts
  */
 function generateABECProjectScripts(hornParams = {}, hornName = "Horn") {
     const hornType = hornParams.hornType || "OS-SE";
     const throatR = hornParams.throatR !== undefined ? hornParams.throatR : 15.0;
+    const mouthR = hornParams.mouthR !== undefined ? hornParams.mouthR : 50.0;
     const length = hornParams.length !== undefined ? hornParams.length : 50.0;
     const cutoffF = hornParams.cutoffF !== undefined ? hornParams.cutoffF : 1000.0;
     const f1 = hornParams.f1 || Math.max(100, Math.round(cutoffF * 0.5));
@@ -511,7 +678,7 @@ function generateABECProjectScripts(hornParams = {}, hornName = "Horn") {
     const numFreq = hornParams.numFreq || (hornParams.symmetry === 'quarter' ? 30 : 48);
     const distance = hornParams.distance || 1.0;
     const isQuarter = hornParams.symmetry === 'quarter';
-    const symLine = isQuarter ? "  Sym=yz\n" : "";
+    const symLine = isQuarter ? "  Sym=xy\n" : "";
 
     const projectAbec = `// Master ABEC 3 Project Definition File
 // Compatible with ABEC 3 and AKABAK 3 (Tools -> Import ABEC Project...)
@@ -529,11 +696,13 @@ C0=observation.txt
 [MeshFiles]
 C0=Horn.stl,M1
 C1=Throat.stl,M2
+C2=Interface.stl,M3
 `;
 
     const solvingTxt = `// ABEC / AKABAK 3 Solving Script
-// Boundary Element Method (BEM) Simulation in Free Air (4*pi steradians)
-${isQuarter ? '// Quarter-Symmetric Simulation (Sym=yz): Exploits dual symmetry across Y=0 and Z=0 planes (8x-16x BEM speedup)\n' : ''}
+// Boundary Element Method (BEM) Simulation with Infinite Baffle (2*pi steradians)
+// Origin Plane Alignment: Mouth sits at z = 0, Throat recessed at z = -${length.toFixed(2)}mm
+${isQuarter ? '// Quarter-Symmetric Simulation (Sym=xy): Dual symmetry across X=0 and Y=0 planes (8x-16x BEM speedup)\n' : ''}
 Control_Solver
   f1=${f1}; f2=${f2}; NumFrequencies=${numFreq}
   Abscissa=log; Dim=3D; MeshFrequency=${f2}
@@ -544,25 +713,42 @@ MeshFile_Properties
 MeshFile_Properties
   MeshFileAlias="M2"; Scale=1mm
 
+MeshFile_Properties
+  MeshFileAlias="M3"; Scale=1mm
+
+// Subdomain 1: Enclosed Horn Interior Volume
 SubDomain_Properties
-  SubDomain=1; ElType=Exterior
+  SubDomain=1; ElType=Interior
+
+// Subdomain 2: Exterior Radiation Half-Space in front of Infinite Baffle (z = 0)
+SubDomain_Properties
+  SubDomain=2; ElType=Exterior; IBPlane=z; IBOffset=0mm
 
 // Horn Wall Boundary (Rigid sound-hard boundary: vn = 0)
 Elements "Horn_Wall"
   Subdomain=1; MeshFileAlias="M1"
   101 Mesh Include ALL
 
-// Throat Driving Diaphragm (Acoustic Velocity excitation)
+// Mouth Interface (Couples interior Subdomain 1 to exterior Subdomain 2)
+Elements "Mouth_Interface"
+  Subdomain=1,2; MeshFileAlias="M3"
+  301 Mesh Include ALL
+
+// Throat Driving Diaphragm (Acoustic Velocity excitation at z = -${length.toFixed(2)}mm)
 Elements "Throat_Diaphragm"
   Subdomain=1; MeshFileAlias="M2"
   201 Mesh Include ALL
 
-Driving "Throat_Driver"
-  RefElements="Throat_Diaphragm"; DrvGroup=1001;
+Driving "Throat_Diaphragm"
+  RefElements="Throat_Diaphragm"
+  DrvGroup=1001
+  DrvWeight=1.0
+  Direction=z
+  1  201  RefElements="Throat_Diaphragm"  Weight=1.0
 `;
 
     const observationTxt = `// ABEC / AKABAK 3 Observation Script
-// Far-field Directivity & Acoustic Radiation Impedance
+// Far-field Directivity & Acoustic Radiation Impedance (Front Half-Space)
 
 Driving_Values
   DrvType=Velocity; Value=1.0
@@ -576,29 +762,29 @@ Radiation_Impedance
   Range_min=0; Range_max=2
   1  1001  1001  ID=1001
 
-// Horizontal Directivity Sonogram (-180 to +180 deg in horizontal X-Z plane)
+// Horizontal Directivity Sonogram (-90 to +90 deg in horizontal X-Z plane, On-axis = +Z)
 BE_Spectrum
   PlotType=Polar
   GraphHeader="Directivity_Hor"
   BodeType=LeveldB
   Range_min=-45; Range_max=5
-  PolarRange=-180,180,145
-  BasePlane=xz
+  PolarRange=-90,90,91
+  BasePlane=zx
   Farfield=true
   Distance=${distance}m
-  1  Inclination=0  ID=101
+  1  Inclination=0  DrvGroups=1001  ID=101
 
-// Vertical Directivity Sonogram (-180 to +180 deg in vertical X-Y plane)
+// Vertical Directivity Sonogram (-90 to +90 deg in vertical Y-Z plane, On-axis = +Z)
 BE_Spectrum
   PlotType=Polar
   GraphHeader="Directivity_Ver"
   BodeType=LeveldB
   Range_min=-45; Range_max=5
-  PolarRange=-180,180,145
-  BasePlane=xy
+  PolarRange=-90,90,91
+  BasePlane=zy
   Farfield=true
   Distance=${distance}m
-  1  Inclination=0  ID=102
+  1  Inclination=0  DrvGroups=1001  ID=102
 `;
 
     const readmeTxt = `========================================================================
@@ -606,21 +792,23 @@ AKABAK 3 / ABEC - Horn BEM Directivity Simulation Package
 ========================================================================
 Generated by:    Horn Profile Generator (Pure HTML & JavaScript)
 Horn Type:       ${hornType}
-Symmetry:        ${isQuarter ? 'Quarter-Symmetric (Sym=yz) - 8x-16x BEM speedup' : 'Full 360° Mesh (Standard)'}
-Throat Radius:   ${throatR} mm (Throat Diameter: ${(throatR * 2).toFixed(2)} mm)
+Symmetry:        ${isQuarter ? 'Quarter-Symmetric (Sym=xy) - 8x-16x BEM speedup' : 'Full 360 deg Mesh (Standard)'}
+Throat Radius:   ${throatR} mm (Throat Diameter: ${(throatR * 2).toFixed(2)} mm at z = -${length.toFixed(2)} mm)
+Mouth Radius:    ${mouthR} mm (Mouth Diameter: ${(mouthR * 2).toFixed(2)} mm at z = 0.00 mm)
 Axial Length:    ${length} mm
 Cutoff Freq:     ${cutoffF} Hz
 Frequency Sweep: ${numFreq} log points (${f1} Hz to ${f2} Hz)
 Driving Source:  Ideal Plane-Wave Diaphragm (Velocity = 1.0 m/s)
-Acoustic Domain: Free Space (4*pi steradians BEM)
+Acoustic Domain: Infinite Baffle on z = 0 (2*pi steradians Half-Space)
 
 Simulation Files:
 -----------------
 - Project.abec     : Master ABEC project definition
-- solving.txt      : BEM physics, mesh assignments & boundary conditions
-- observation.txt  : Far-field polar directivity arcs (Hor/Ver) & RadImp
-- Horn.stl         : Horn surface mesh (sound-hard boundary)
-- Throat.stl       : Planar driving diaphragm cap at x = 0
+- solving.txt      : BEM physics, Subdomains (1:Interior, 2:Exterior), Infinite Baffle & Boundaries
+- observation.txt  : Far-field polar directivity arcs (Hor X-Z / Ver Y-Z) & RadImp
+- Horn.stl         : Horn surface mesh (sound-hard boundary, z = -${length.toFixed(2)}mm to 0.00mm)
+- Throat.stl       : Planar driving diaphragm cap at z = -${length.toFixed(2)}mm
+- Interface.stl    : Planar mouth aperture interface mesh at z = 0.00mm
 - README.txt       : Quick-start execution guide
 
 Instructions to Run in AKABAK 3:
@@ -630,10 +818,10 @@ Instructions to Run in AKABAK 3:
 3. Browse and select "Project.abec" from this extracted folder.
 4. Click "Open", then click "Start Import".
 5. Once verified, click "Apply" to build the AKABAK 3 simulation model.
-${isQuarter ? '   * Notice: In the AKABAK 3D viewport, the horn will automatically appear\n     mirrored across both symmetry planes as a complete horn!\n' : ''}6. Press F5 (or click Calculate) to run the BEM frequency sweep.
+${isQuarter ? '   * Notice: In the AKABAK 3D viewport, the horn will automatically appear\\n     mirrored across X and Y symmetry planes as a complete horn!\\n' : ''}6. Press F5 (or click Calculate) to run the BEM frequency sweep.
 7. In VACS, inspect the generated graphs:
-   * "Directivity_Hor" : Horizontal Directivity Isobar Sonogram (-180° to +180°)
-   * "Directivity_Ver" : Vertical Directivity Isobar Sonogram (-180° to +180°)
+   * "Directivity_Hor" : Horizontal Directivity Isobar Sonogram (-90 deg to +90 deg)
+   * "Directivity_Ver" : Vertical Directivity Isobar Sonogram (-90 deg to +90 deg)
    * "RadImp"          : Throat Radiation Resistance & Reactance
 ========================================================================
 `;
@@ -651,21 +839,32 @@ function exportAKABAKZip(points, isHCD = false, isMorph = false, hornParams = {}
     }
 
     const isQuarter = hornParams.symmetry === 'quarter';
-
-    // 1. Generate single-face Horn STL (wallThickness = 0)
-    const hornStlBuffer = generateSTL(points, isHCD, 0.0, 96, isQuarter);
-
-    // 2. Generate flat circular or elliptical Throat driving diaphragm cap at x = 0
+    const totalLen = points.length > 0 ? points[points.length - 1].x : (hornParams.length || 50.0);
+    const mouthPoint = points.length > 0 ? points[points.length - 1] : null;
+    const mouthR = mouthPoint ? mouthPoint.y : 50.0;
     const throatR = hornParams.throatR !== undefined ? hornParams.throatR : (points[0] ? points[0].y : 15.0);
-    const throatStlBuffer = generateThroatCapSTL(throatR, 96, isQuarter, points[0], isHCD);
 
-    // 3. Generate simulation scripts
+    hornParams.length = totalLen;
+    hornParams.mouthR = mouthR;
+    hornParams.throatR = throatR;
+
+    // 1. Generate single-face Horn STL aligned with Z-axis (mouth at z=0, throat at z=-totalLen)
+    const hornStlBuffer = generateHornBEMSTL(points, isHCD, 96, isQuarter);
+
+    // 2. Generate flat Throat driving diaphragm cap at z = -totalLen
+    const throatStlBuffer = generateThroatCapSTL(throatR, totalLen, 96, isQuarter, points[0], isHCD);
+
+    // 3. Generate flat Mouth interface cap at z = 0
+    const interfaceStlBuffer = generateMouthInterfaceSTL(mouthR, 96, isQuarter, mouthPoint, isHCD);
+
+    // 4. Generate simulation scripts
     const scripts = generateABECProjectScripts(hornParams, hornName);
 
-    // 4. Bundle into ZIP
+    // 5. Bundle into ZIP
     const zip = new JSZip();
     zip.file("Horn.stl", hornStlBuffer);
     zip.file("Throat.stl", throatStlBuffer);
+    zip.file("Interface.stl", interfaceStlBuffer);
     zip.file("Project.abec", scripts.projectAbec);
     zip.file("solving.txt", scripts.solvingTxt);
     zip.file("observation.txt", scripts.observationTxt);
@@ -692,7 +891,9 @@ if (typeof module !== 'undefined' && module.exports) {
         generateSTL,
         generateOBJ,
         buildHornMeshGeometry,
+        generateHornBEMSTL,
         generateThroatCapSTL,
+        generateMouthInterfaceSTL,
         generateABECProjectScripts,
         exportAKABAKZip
     };
@@ -705,7 +906,9 @@ if (typeof module !== 'undefined' && module.exports) {
         generateSTL,
         generateOBJ,
         buildHornMeshGeometry,
+        generateHornBEMSTL,
         generateThroatCapSTL,
+        generateMouthInterfaceSTL,
         generateABECProjectScripts,
         exportAKABAKZip
     };
